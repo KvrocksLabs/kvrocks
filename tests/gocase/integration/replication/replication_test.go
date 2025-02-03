@@ -33,6 +33,7 @@ import (
 )
 
 func TestClusterReplication(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	masterSrv := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})
@@ -91,6 +92,7 @@ func TestClusterReplication(t *testing.T) {
 }
 
 func TestReplicationWithHostname(t *testing.T) {
+	t.Parallel()
 	srvA := util.StartServer(t, map[string]string{})
 	defer srvA.Close()
 	rdbA := srvA.NewClient()
@@ -116,6 +118,7 @@ func TestReplicationWithHostname(t *testing.T) {
 }
 
 func TestReplicationLoading(t *testing.T) {
+	t.Parallel()
 	srvA := util.StartServer(t, map[string]string{})
 	defer srvA.Close()
 	rdbA := srvA.NewClient()
@@ -150,6 +153,7 @@ func TestReplicationLoading(t *testing.T) {
 }
 
 func TestReplicationBasics(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -247,6 +251,7 @@ func TestReplicationBasics(t *testing.T) {
 }
 
 func TestReplicationWithMultiSlaves(t *testing.T) {
+	t.Parallel()
 	srvA := util.StartServer(t, map[string]string{})
 	defer srvA.Close()
 	rdbA := srvA.NewClient()
@@ -280,6 +285,7 @@ func TestReplicationWithMultiSlaves(t *testing.T) {
 }
 
 func TestReplicationWithLimitSpeed(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{
 		"max-replication-mb":            "1",
 		"rocksdb.compression":           "no",
@@ -329,6 +335,7 @@ func TestReplicationWithLimitSpeed(t *testing.T) {
 }
 
 func TestReplicationShareCheckpoint(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -366,6 +373,7 @@ func TestReplicationShareCheckpoint(t *testing.T) {
 }
 
 func TestReplicationContinueRunning(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -394,6 +402,7 @@ func TestReplicationContinueRunning(t *testing.T) {
 }
 
 func TestReplicationChangePassword(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -436,6 +445,7 @@ func TestReplicationChangePassword(t *testing.T) {
 }
 
 func TestReplicationAnnounceIP(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -481,6 +491,7 @@ func TestReplicationAnnounceIP(t *testing.T) {
 }
 
 func TestShouldNotReplicate(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{})
 	defer master.Close()
 	masterClient := master.NewClient()
@@ -510,6 +521,7 @@ func TestShouldNotReplicate(t *testing.T) {
 }
 
 func TestFullSyncReplication(t *testing.T) {
+	t.Parallel()
 	master := util.StartServer(t, map[string]string{
 		"rocksdb.write_buffer_size":       "4",
 		"rocksdb.target_file_size_base":   "16",
@@ -554,6 +566,7 @@ func TestFullSyncReplication(t *testing.T) {
 }
 
 func TestSlaveLostMaster(t *testing.T) {
+	t.Parallel()
 	// integration test for #2662 and #2671
 	ctx := context.Background()
 
