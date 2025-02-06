@@ -1228,7 +1228,7 @@ void Server::GetPersistenceInfo(std::string *info) {
   *info = string_stream.str();
 }
 
-void Server::GetCpuInfo(std::string *info) {
+void Server::GetCpuInfo(std::string *info) {  // NOLINT(readability-convert-member-functions-to-static)
   std::ostringstream string_stream;
 
   rusage self_ru;
