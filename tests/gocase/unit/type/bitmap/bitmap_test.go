@@ -120,6 +120,60 @@ func SimulateBitOp(op BITOP, values ...[]byte) string {
 	return string(result)
 }
 
+var bitmapFuzzyClients []*redis.Client
+var bitMapFuzzyServers []*util.KvrocksServer
+
+func TestBitmapFuzzy(t *testing.T) {
+	ctx := context.Background()
+	for range []BITOP{AND, OR, XOR} {
+		srv := util.StartServer(t, map[string]string{})
+		bitMapFuzzyServers = append(bitMapFuzzyServers, srv)
+		rdb := srv.NewClient()
+		bitmapFuzzyClients = append(bitmapFuzzyClients, rdb)
+	}
+
+	t.Cleanup(func() {
+		for _, srv := range bitMapFuzzyServers {
+			srv.Close()
+		}
+		for _, client := range bitmapFuzzyClients {
+			client.Close()
+		}
+	})
+
+	for index, op := range []BITOP{AND, OR, XOR} {
+		t.Run("BITOP fuzzing "+strconv.Itoa(int(op)), func(t *testing.T) {
+			t.Parallel()
+			rdb := bitmapFuzzyClients[index]
+			for i := 0; i < 10; i++ {
+				require.NoError(t, rdb.FlushAll(ctx).Err())
+				numVec := util.RandomInt(10) + 1
+				var vec [][]byte
+				var veckeys []string
+				for j := 0; j < int(numVec); j++ {
+					str := util.RandString(0, 1000, util.Binary)
+					vec = append(vec, []byte(str))
+					veckeys = append(veckeys, "vector_"+strconv.Itoa(j))
+					Set2SetBit(t, rdb, ctx, "vector_"+strconv.Itoa(j), []byte(str))
+				}
+				switch op {
+				case AND:
+					require.NoError(t, rdb.BitOpAnd(ctx, "target", veckeys...).Err())
+					require.EqualValues(t, SimulateBitOp(AND, vec...), rdb.Get(ctx, "target").Val())
+				case OR:
+					require.NoError(t, rdb.BitOpOr(ctx, "target", veckeys...).Err())
+					require.EqualValues(t, SimulateBitOp(OR, vec...), rdb.Get(ctx, "target").Val())
+				case XOR:
+					require.NoError(t, rdb.BitOpXor(ctx, "target", veckeys...).Err())
+					require.EqualValues(t, SimulateBitOp(XOR, vec...), rdb.Get(ctx, "target").Val())
+				}
+
+			}
+		})
+	}
+
+}
+
 func TestBitmap(t *testing.T) {
 	srv := util.StartServer(t, map[string]string{})
 	defer srv.Close()
@@ -295,35 +349,6 @@ func TestBitmap(t *testing.T) {
 		require.NoError(t, rdb.BitOpXor(ctx, "res3", "a", "b").Err())
 		require.EqualValues(t, []string{"\x01\x02\xff\x00", "\x01\x02\xff\xff", "\x00\x00\x00\xff"}, GetBitmap(t, rdb, ctx, "res1", "res2", "res3"))
 	})
-
-	for _, op := range []BITOP{AND, OR, XOR} {
-		t.Run("BITOP fuzzing "+strconv.Itoa(int(op)), func(t *testing.T) {
-			for i := 0; i < 10; i++ {
-				require.NoError(t, rdb.FlushAll(ctx).Err())
-				numVec := util.RandomInt(10) + 1
-				var vec [][]byte
-				var veckeys []string
-				for j := 0; j < int(numVec); j++ {
-					str := util.RandString(0, 1000, util.Binary)
-					vec = append(vec, []byte(str))
-					veckeys = append(veckeys, "vector_"+strconv.Itoa(j))
-					Set2SetBit(t, rdb, ctx, "vector_"+strconv.Itoa(j), []byte(str))
-				}
-				switch op {
-				case AND:
-					require.NoError(t, rdb.BitOpAnd(ctx, "target", veckeys...).Err())
-					require.EqualValues(t, SimulateBitOp(AND, vec...), rdb.Get(ctx, "target").Val())
-				case OR:
-					require.NoError(t, rdb.BitOpOr(ctx, "target", veckeys...).Err())
-					require.EqualValues(t, SimulateBitOp(OR, vec...), rdb.Get(ctx, "target").Val())
-				case XOR:
-					require.NoError(t, rdb.BitOpXor(ctx, "target", veckeys...).Err())
-					require.EqualValues(t, SimulateBitOp(XOR, vec...), rdb.Get(ctx, "target").Val())
-				}
-
-			}
-		})
-	}
 
 	t.Run("BITOP NOT fuzzing", func(t *testing.T) {
 		for i := 0; i < 10; i++ {
