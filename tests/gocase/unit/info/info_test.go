@@ -119,6 +119,13 @@ func TestInfo(t *testing.T) {
 		require.Contains(t, splitValues, "count")
 		require.Contains(t, splitValues, "inf")
 	})
+
+	t.Run("multiple sections", func(t *testing.T) {
+		info := rdb.Info(ctx, "server", "cpu")
+		require.NoError(t, info.Err())
+		require.Contains(t, info.Val(), "# Server")
+		require.Contains(t, info.Val(), "# CPU")
+	})
 }
 
 func TestKeyspaceHitMiss(t *testing.T) {
