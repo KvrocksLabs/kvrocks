@@ -1293,8 +1293,6 @@ void Server::GetKeyspaceInfo(const std::string &ns, std::string *info) {
 void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sections, std::string *info) {
   info->clear();
 
-  bool all = sections.empty() || std::find(sections.begin(), sections.end(), "all") != sections.end();
-
   std::vector<std::pair<std::string, std::function<void(Server *, std::string *)>>> info_funcs = {
       {"server", &Server::GetServerInfo},
       {"clients", &Server::GetClientsInfo},
@@ -1311,9 +1309,11 @@ void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sect
 
   std::stringstream string_stream;
 
+  bool all = sections.empty() || std::find(sections.begin(), sections.end(), "all") != sections.end();
+
   bool first = true;
-  if (all) {
-    for (const auto &[_, fn] : info_funcs) {
+  for (const auto &[sec, fn] : info_funcs) {
+    if (all || std::find(sections.begin(), sections.end(), sec) != sections.end()) {
       if (first)
         first = false;
       else
@@ -1322,20 +1322,6 @@ void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sect
       std::string out;
       fn(this, &out);
       string_stream << out;
-    }
-  } else {
-    for (const auto &i : sections) {
-      if (auto iter = std::find_if(info_funcs.begin(), info_funcs.end(), [&i](const auto &v) { return v.first == i; });
-          iter != info_funcs.end()) {
-        if (first)
-          first = false;
-        else
-          string_stream << "\r\n";
-
-        std::string out;
-        iter->second(this, &out);
-        string_stream << out;
-      }
     }
   }
 
