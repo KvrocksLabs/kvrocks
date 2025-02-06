@@ -235,14 +235,12 @@ class CommandConfig : public Commander {
 class CommandInfo : public Commander {
  public:
   Status Execute([[maybe_unused]] engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
-    std::string section = "all";
-    if (args_.size() == 2) {
-      section = util::ToLower(args_[1]);
-    } else if (args_.size() > 2) {
-      return {Status::RedisParseErr, errInvalidSyntax};
+    std::vector<std::string> sections;
+    for (size_t i = 1; i < args_.size(); ++i) {
+      sections.push_back(util::ToLower(args_[i]));
     }
     std::string info;
-    srv->GetInfo(conn->GetNamespace(), section, &info);
+    srv->GetInfo(conn->GetNamespace(), sections, &info);
     *output = conn->VerbatimString("txt", info);
     return Status::OK();
   }

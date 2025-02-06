@@ -27,6 +27,7 @@
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -853,6 +854,8 @@ void Server::cron() {
 }
 
 void Server::GetRocksDBInfo(std::string *info) {
+  if (is_loading_) return;
+
   std::ostringstream string_stream;
   rocksdb::DB *db = storage->GetDB();
 
@@ -1028,6 +1031,8 @@ void Server::GetMemoryInfo(std::string *info) {
 }
 
 void Server::GetReplicationInfo(std::string *info) {
+  if (is_loading_) return;
+
   std::ostringstream string_stream;
   string_stream << "# Replication\r\n";
   string_stream << "role:" << (IsSlave() ? "slave" : "master") << "\r\n";
@@ -1207,139 +1212,117 @@ void Server::GetClusterInfo(std::string *info) {
   *info = string_stream.str();
 }
 
+void Server::GetPersistenceInfo(std::string *info) {
+  std::ostringstream string_stream;
+
+  string_stream << "# Persistence\r\n";
+  string_stream << "loading:" << is_loading_ << "\r\n";
+
+  std::lock_guard<std::mutex> lg(db_job_mu_);
+  string_stream << "bgsave_in_progress:" << (is_bgsave_in_progress_ ? 1 : 0) << "\r\n";
+  string_stream << "last_bgsave_time:"
+                << (last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_) << "\r\n";
+  string_stream << "last_bgsave_status:" << last_bgsave_status_ << "\r\n";
+  string_stream << "last_bgsave_time_sec:" << last_bgsave_duration_secs_ << "\r\n";
+
+  *info = string_stream.str();
+}
+
+void Server::GetCpuInfo(std::string *info) {  // NOLINT(readability-convert-member-functions-to-static)
+  std::ostringstream string_stream;
+
+  rusage self_ru;
+  getrusage(RUSAGE_SELF, &self_ru);
+  string_stream << "# CPU\r\n";
+  string_stream << "used_cpu_sys:"
+                << static_cast<float>(self_ru.ru_stime.tv_sec) + static_cast<float>(self_ru.ru_stime.tv_usec / 1000000)
+                << "\r\n";
+  string_stream << "used_cpu_user:"
+                << static_cast<float>(self_ru.ru_utime.tv_sec) + static_cast<float>(self_ru.ru_utime.tv_usec / 1000000)
+                << "\r\n";
+
+  *info = string_stream.str();
+}
+
+void Server::GetKeyspaceInfo(const std::string &ns, std::string *info) {
+  if (is_loading_) return;
+
+  std::ostringstream string_stream;
+
+  KeyNumStats stats;
+  GetLatestKeyNumStats(ns, &stats);
+
+  // FIXME(mwish): output still requires std::tm.
+  auto last_scan_time = static_cast<time_t>(GetLastScanTime(ns));
+  std::tm last_scan_tm{};
+  localtime_r(&last_scan_time, &last_scan_tm);
+
+  string_stream << "# Keyspace\r\n";
+  if (last_scan_time == 0) {
+    string_stream << "# WARN: DBSIZE SCAN never performed yet\r\n";
+  } else {
+    string_stream << "# Last DBSIZE SCAN time: " << std::put_time(&last_scan_tm, "%a %b %e %H:%M:%S %Y") << "\r\n";
+  }
+  string_stream << "db0:keys=" << stats.n_key << ",expires=" << stats.n_expires << ",avg_ttl=" << stats.avg_ttl
+                << ",expired=" << stats.n_expired << "\r\n";
+  string_stream << "sequence:" << storage->GetDB()->GetLatestSequenceNumber() << "\r\n";
+  string_stream << "used_db_size:" << storage->GetTotalSize(ns) << "\r\n";
+  string_stream << "max_db_size:" << config_->max_db_size * GiB << "\r\n";
+  double used_percent = config_->max_db_size ? static_cast<double>(storage->GetTotalSize() * 100) /
+                                                   static_cast<double>(config_->max_db_size * GiB)
+                                             : 0;
+  string_stream << "used_percent: " << used_percent << "%\r\n";
+
+  struct statvfs stat;
+  if (statvfs(config_->db_dir.c_str(), &stat) == 0) {
+    auto disk_capacity = stat.f_blocks * stat.f_frsize;
+    auto used_disk_size = (stat.f_blocks - stat.f_bavail) * stat.f_frsize;
+    string_stream << "disk_capacity:" << disk_capacity << "\r\n";
+    string_stream << "used_disk_size:" << used_disk_size << "\r\n";
+    double used_disk_percent = static_cast<double>(used_disk_size * 100) / static_cast<double>(disk_capacity);
+    string_stream << "used_disk_percent: " << used_disk_percent << "%\r\n";
+  }
+
+  *info = string_stream.str();
+}
+
 // WARNING: we must not access DB(i.e. RocksDB) when server is loading since
 // DB is closed and the pointer is invalid. Server may crash if we access DB during loading.
 // If you add new fields which access DB into INFO command output, make sure
 // this section can't be shown when loading(i.e. !is_loading_).
-void Server::GetInfo(const std::string &ns, const std::string &section, std::string *info) {
+void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sections, std::string *info) {
   info->clear();
 
-  std::ostringstream string_stream;
-  bool all = section == "all";
-  int section_cnt = 0;
+  std::vector<std::pair<std::string, std::function<void(Server *, std::string *)>>> info_funcs = {
+      {"server", &Server::GetServerInfo},
+      {"clients", &Server::GetClientsInfo},
+      {"memory", &Server::GetMemoryInfo},
+      {"persistence", &Server::GetPersistenceInfo},
+      {"stats", &Server::GetStatsInfo},
+      {"replication", &Server::GetReplicationInfo},
+      {"cpu", &Server::GetCpuInfo},
+      {"commandstats", &Server::GetCommandsStatsInfo},
+      {"cluster", &Server::GetClusterInfo},
+      {"keyspace", [&ns](Server *srv, std::string *info) { srv->GetKeyspaceInfo(ns, info); }},
+      {"rocksdb", &Server::GetRocksDBInfo},
+  };
 
-  if (all || section == "server") {
-    std::string server_info;
-    GetServerInfo(&server_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << server_info;
-  }
+  std::stringstream string_stream;
 
-  if (all || section == "clients") {
-    std::string clients_info;
-    GetClientsInfo(&clients_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << clients_info;
-  }
+  bool all = sections.empty() || std::find(sections.begin(), sections.end(), "all") != sections.end();
 
-  if (all || section == "memory") {
-    std::string memory_info;
-    GetMemoryInfo(&memory_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << memory_info;
-  }
+  bool first = true;
+  for (const auto &[sec, fn] : info_funcs) {
+    if (all || std::find(sections.begin(), sections.end(), sec) != sections.end()) {
+      if (first)
+        first = false;
+      else
+        string_stream << "\r\n";
 
-  if (all || section == "persistence") {
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << "# Persistence\r\n";
-    string_stream << "loading:" << is_loading_ << "\r\n";
-
-    std::lock_guard<std::mutex> lg(db_job_mu_);
-    string_stream << "bgsave_in_progress:" << (is_bgsave_in_progress_ ? 1 : 0) << "\r\n";
-    string_stream << "last_bgsave_time:"
-                  << (last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_) << "\r\n";
-    string_stream << "last_bgsave_status:" << last_bgsave_status_ << "\r\n";
-    string_stream << "last_bgsave_time_sec:" << last_bgsave_duration_secs_ << "\r\n";
-  }
-
-  if (all || section == "stats") {
-    std::string stats_info;
-    GetStatsInfo(&stats_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << stats_info;
-  }
-
-  // In replication section, we access DB, so we can't do that when loading
-  if (!is_loading_ && (all || section == "replication")) {
-    std::string replication_info;
-    GetReplicationInfo(&replication_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << replication_info;
-  }
-
-  if (all || section == "cpu") {
-    rusage self_ru;
-    getrusage(RUSAGE_SELF, &self_ru);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << "# CPU\r\n";
-    string_stream << "used_cpu_sys:"
-                  << static_cast<float>(self_ru.ru_stime.tv_sec) +
-                         static_cast<float>(self_ru.ru_stime.tv_usec / 1000000)
-                  << "\r\n";
-    string_stream << "used_cpu_user:"
-                  << static_cast<float>(self_ru.ru_utime.tv_sec) +
-                         static_cast<float>(self_ru.ru_utime.tv_usec / 1000000)
-                  << "\r\n";
-  }
-
-  if (all || section == "commandstats") {
-    std::string commands_stats_info;
-    GetCommandsStatsInfo(&commands_stats_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << commands_stats_info;
-  }
-
-  if (all || section == "cluster") {
-    std::string cluster_info;
-    GetClusterInfo(&cluster_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << cluster_info;
-  }
-
-  // In keyspace section, we access DB, so we can't do that when loading
-  if (!is_loading_ && (all || section == "keyspace")) {
-    KeyNumStats stats;
-    GetLatestKeyNumStats(ns, &stats);
-
-    // FIXME(mwish): output still requires std::tm.
-    auto last_scan_time = static_cast<time_t>(GetLastScanTime(ns));
-    std::tm last_scan_tm{};
-    localtime_r(&last_scan_time, &last_scan_tm);
-
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << "# Keyspace\r\n";
-    if (last_scan_time == 0) {
-      string_stream << "# WARN: DBSIZE SCAN never performed yet\r\n";
-    } else {
-      string_stream << "# Last DBSIZE SCAN time: " << std::put_time(&last_scan_tm, "%a %b %e %H:%M:%S %Y") << "\r\n";
+      std::string out;
+      fn(this, &out);
+      string_stream << out;
     }
-    string_stream << "db0:keys=" << stats.n_key << ",expires=" << stats.n_expires << ",avg_ttl=" << stats.avg_ttl
-                  << ",expired=" << stats.n_expired << "\r\n";
-    string_stream << "sequence:" << storage->GetDB()->GetLatestSequenceNumber() << "\r\n";
-    string_stream << "used_db_size:" << storage->GetTotalSize(ns) << "\r\n";
-    string_stream << "max_db_size:" << config_->max_db_size * GiB << "\r\n";
-    double used_percent = config_->max_db_size ? static_cast<double>(storage->GetTotalSize() * 100) /
-                                                     static_cast<double>(config_->max_db_size * GiB)
-                                               : 0;
-    string_stream << "used_percent: " << used_percent << "%\r\n";
-
-    struct statvfs stat;
-    if (statvfs(config_->db_dir.c_str(), &stat) == 0) {
-      auto disk_capacity = stat.f_blocks * stat.f_frsize;
-      auto used_disk_size = (stat.f_blocks - stat.f_bavail) * stat.f_frsize;
-      string_stream << "disk_capacity:" << disk_capacity << "\r\n";
-      string_stream << "used_disk_size:" << used_disk_size << "\r\n";
-      double used_disk_percent = static_cast<double>(used_disk_size * 100) / static_cast<double>(disk_capacity);
-      string_stream << "used_disk_percent: " << used_disk_percent << "%\r\n";
-    }
-  }
-
-  // In rocksdb section, we access DB, so we can't do that when loading
-  if (!is_loading_ && (all || section == "rocksdb")) {
-    std::string rocksdb_info;
-    GetRocksDBInfo(&rocksdb_info);
-    if (section_cnt++) string_stream << "\r\n";
-    string_stream << rocksdb_info;
   }
 
   *info = string_stream.str();

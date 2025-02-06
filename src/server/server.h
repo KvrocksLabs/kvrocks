@@ -241,7 +241,10 @@ class Server {
   void GetRoleInfo(std::string *info);
   void GetCommandsStatsInfo(std::string *info);
   void GetClusterInfo(std::string *info);
-  void GetInfo(const std::string &ns, const std::string &section, std::string *info);
+  void GetPersistenceInfo(std::string *info);
+  void GetCpuInfo(std::string *info);
+  void GetKeyspaceInfo(const std::string &ns, std::string *info);
+  void GetInfo(const std::string &ns, const std::vector<std::string> &sections, std::string *info);
   std::string GetRocksDBStatsJson() const;
   ReplState GetReplicationState();
 
