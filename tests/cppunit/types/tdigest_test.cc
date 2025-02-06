@@ -141,32 +141,33 @@ TEST_F(RedisTDigestTest, CentroidTest) {
 
 TEST_F(RedisTDigestTest, Create) {
   std::string test_digest_name = "test_digest_create" + std::to_string(util::GetTimeStampMS());
-  {
-    auto status = tdigest_->Create(*ctx_, test_digest_name, {100});
-    ASSERT_TRUE(status);
-    ASSERT_TRUE(status->ok());
+  bool exsits = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
+  ASSERT_FALSE(exsits);
+  ASSERT_TRUE(status.ok());
 
-    status = tdigest_->Create(*ctx_, test_digest_name, {100});
-    ASSERT_FALSE(status);
+  status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
+  ASSERT_TRUE(exsits);
+  ASSERT_TRUE(status.IsInvalidArgument());
 
-    auto ns_key = tdigest_->AppendNamespacePrefix(test_digest_name);
-    TDigestMetadata metadata;
-    auto get_status = tdigest_->GetMetaData(*ctx_, ns_key, &metadata);
-    ASSERT_TRUE(get_status.ok()) << get_status.ToString();
-    ASSERT_EQ(metadata.compression, 100) << metadata.compression;
-  }
+  auto ns_key = tdigest_->AppendNamespacePrefix(test_digest_name);
+  TDigestMetadata metadata;
+  auto get_status = tdigest_->GetMetaData(*ctx_, ns_key, &metadata);
+  ASSERT_TRUE(get_status.ok()) << get_status.ToString();
+  ASSERT_EQ(metadata.compression, 100) << metadata.compression;
 }
 
 TEST_F(RedisTDigestTest, Quantile) {
   std::string test_digest_name = "test_digest_quantile" + std::to_string(util::GetTimeStampMS());
-  {
-    auto status = tdigest_->Create(*ctx_, test_digest_name, {100});
-    ASSERT_TRUE(status);
-    ASSERT_TRUE(status->ok());
-  }
+
+  bool exists = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exists);
+  ASSERT_FALSE(exists);
+  ASSERT_TRUE(status.ok());
   std::vector<double> samples = ranges::views::iota(1, 101) | ranges::views::transform([](int i) { return i; }) |
                                 ranges::to<std::vector<double>>();
-  auto status = tdigest_->Add(*ctx_, test_digest_name, samples);
+
+  status = tdigest_->Add(*ctx_, test_digest_name, samples);
   ASSERT_TRUE(status.ok()) << status.ToString();
 
   std::vector<double> qs = {0.5, 0.9, 0.99};
@@ -181,11 +182,10 @@ TEST_F(RedisTDigestTest, Quantile) {
 
 TEST_F(RedisTDigestTest, PlentyQuantile_10000_144) {
   std::string test_digest_name = "test_digest_quantile" + std::to_string(util::GetTimeStampMS());
-  {
-    auto status = tdigest_->Create(*ctx_, test_digest_name, {100});
-    ASSERT_TRUE(status);
-    ASSERT_TRUE(status->ok());
-  }
+  bool exsits = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
+  ASSERT_FALSE(exsits);
+  ASSERT_TRUE(status.ok());
 
   int sample_count = 10000;
   int quantile_count = 144;
@@ -193,7 +193,7 @@ TEST_F(RedisTDigestTest, PlentyQuantile_10000_144) {
   double to = 100;
   auto error_double = (to - from) / sample_count;
   auto samples = GenerateSamples(sample_count, -100, 100);
-  auto status = tdigest_->Add(*ctx_, test_digest_name, samples);
+  status = tdigest_->Add(*ctx_, test_digest_name, samples);
   ASSERT_TRUE(status.ok()) << status.ToString();
 
   auto qs = GenerateQuantiles(quantile_count);
@@ -210,11 +210,11 @@ TEST_F(RedisTDigestTest, PlentyQuantile_10000_144) {
 
 TEST_F(RedisTDigestTest, Add_2_times) {
   std::string test_digest_name = "test_digest_quantile" + std::to_string(util::GetTimeStampMS());
-  {
-    auto status = tdigest_->Create(*ctx_, test_digest_name, {100});
-    ASSERT_TRUE(status);
-    ASSERT_TRUE(status->ok());
-  }
+
+  bool exsits = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
+  ASSERT_FALSE(exsits);
+  ASSERT_TRUE(status.ok());
 
   int sample_count = 17;
   int quantile_count = 7;
@@ -228,12 +228,12 @@ TEST_F(RedisTDigestTest, Add_2_times) {
       samples | ranges::views::chunk(sample_count / group_count) | ranges::to<std::vector<std::vector<double>>>();
 
   for (const auto &s : samples_sub_group) {
-    auto status = tdigest_->Add(*ctx_, test_digest_name, s);
+    status = tdigest_->Add(*ctx_, test_digest_name, s);
     ASSERT_TRUE(status.ok()) << status.ToString();
   }
 
   redis::TDigestQuantitleResult tdigest_result;
-  auto status = tdigest_->Quantile(*ctx_, test_digest_name, qs, &tdigest_result);
+  status = tdigest_->Quantile(*ctx_, test_digest_name, qs, &tdigest_result);
   ASSERT_TRUE(status.ok()) << status.ToString();
 
   for (int i = 0; i < quantile_count; i++) {

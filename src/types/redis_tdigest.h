@@ -50,8 +50,17 @@ class TDigest : public SubKeyScanner {
   using Slice = rocksdb::Slice;
   explicit TDigest(engine::Storage* storage, const std::string& ns)
       : SubKeyScanner(storage, ns), cf_handle_(storage->GetCFHandle(ColumnFamilyID::PrimarySubkey)) {}
-  std::optional<rocksdb::Status> Create(engine::Context& ctx, const Slice& digest_name,
-                                        const TDigestCreateOptions& options);
+  /**
+   * @brief Create a t-digest structure.
+   *
+   * @param ctx The context of the operation.
+   * @param digest_name The name of the t-digest.
+   * @param options The options of the t-digest.
+   * @param exsits The output parameter to indicate whether the t-digest already exists.
+   * @return rocksdb::Status
+   */
+  rocksdb::Status Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
+                         bool* exsits);
   rocksdb::Status Add(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& inputs);
   rocksdb::Status Quantile(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& qs,
                            TDigestQuantitleResult* result);
@@ -91,7 +100,7 @@ class TDigest : public SubKeyScanner {
                                     const TDigestMetadata& metadata, const std::vector<Centroid>& centroids);
 
   std::string internalSegmentGuardPrefixKey(const TDigestMetadata& metadata, const std::string& ns_key,
-                                            SegmentType seg);
+                                            SegmentType seg) const;
 
   rocksdb::Status mergeCurrentBuffer(engine::Context& ctx, const std::string& ns_key,
                                      ObserverOrUniquePtr<rocksdb::WriteBatchBase>& batch, TDigestMetadata* metadata,

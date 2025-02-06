@@ -350,8 +350,8 @@ class TDigestMetadata : public Metadata {
   uint64_t merged_weight = 0;
   double minimum = std::numeric_limits<double>::max();
   double maximum = std::numeric_limits<double>::lowest();
-  uint64_t total_observations = 0;
-  uint64_t merge_times = 0;
+  uint64_t total_observations = 0;  // reserved for TDIGEST.INFO command
+  uint64_t merge_times = 0;         // reserved for TDIGEST.INFO command
 
   explicit TDigestMetadata(uint32_t compression, uint32_t capacity, bool generate_version = true)
       : Metadata(kRedisTDigest, generate_version), compression(compression), capacity(capacity) {}

@@ -80,9 +80,9 @@ class TDigestMerger : private T {
       td.back().Merge(centroid);
     } else {
       const double quantile = weight_so_far_ / total_weight_;
-      const double next_weight_limit = total_weight_ * this->Q(this->K(quantile) + 1);
       // weight limit should be strictly increasing, until the last centroid
-      if (next_weight_limit <= weight_limit_) {
+      if (const double next_weight_limit = total_weight_ * this->Q(this->K(quantile) + 1);
+          next_weight_limit <= weight_limit_) {
         weight_limit_ = total_weight_;
       } else {
         weight_limit_ = next_weight_limit;
@@ -94,7 +94,8 @@ class TDigestMerger : private T {
 
   // validate k-size of a tdigest
   Status Validate(const std::vector<Centroid>& tdigest, double total_weight) const {
-    double q_prev = 0, k_prev = this->K(0);
+    double q_prev = 0;
+    double k_prev = this->K(0);
     for (const auto& i : tdigest) {
       const double q = q_prev + i.weight / total_weight;
       const double k = this->K(q);
@@ -145,7 +146,8 @@ class TDigestImpl {
 
   Status Validate() const {
     // check weight, centroid order
-    double total_weight = 0, prev_mean = std::numeric_limits<double>::lowest();
+    double total_weight = 0;
+    double prev_mean = std::numeric_limits<double>::lowest();
     for (const auto& centroid : tdigests_[current_]) {
       if (std::isnan(centroid.mean) || std::isnan(centroid.weight)) {
         return Status::Corruption("NAN found in tdigest");
@@ -194,8 +196,7 @@ class TDigestImpl {
     queue_buffer.reserve(tdigest_impls.size() + 1);
     CentroidQueue queue(std::move(centroid_gt), std::move(queue_buffer));
 
-    const auto& this_tdigest = tdigests_[current_];
-    if (this_tdigest.size() > 0) {
+    if (const auto& this_tdigest = tdigests_[current_]; !this_tdigest.empty()) {
       queue.emplace(this_tdigest.cbegin(), this_tdigest.cend());
     }
     for (const TDigestImpl* td : tdigest_impls) {
@@ -209,7 +210,8 @@ class TDigestImpl {
     }
 
     merger_.Reset(total_weight_, &tdigests_[1 - current_]);
-    CentroidIter current_iter, end_iter;
+    CentroidIter current_iter;
+    CentroidIter end_iter;
     // do k-way merge till one buffer left
     while (queue.size() > 1) {
       std::tie(current_iter, end_iter) = queue.top();
@@ -249,19 +251,24 @@ class TDigestImpl {
     // pick next minimal centroid from input and tdigest, feed to merger
     merger_.Reset(total_weight_, &tdigests_[1 - current_]);
     const auto& td = tdigests_[current_];
-    uint32_t tdigest_index = 0, input_index = 0;
+    uint32_t tdigest_index = 0;
+    uint32_t input_index = 0;
     while (tdigest_index < td.size() && input_index < input.size()) {
       if (td[tdigest_index].mean < input[input_index]) {
-        merger_.Add(td[tdigest_index++]);
+        merger_.Add(td[tdigest_index]);
+        ++tdigest_index;
       } else {
-        merger_.Add(Centroid{input[input_index++], 1});
+        merger_.Add(Centroid{input[input_index], 1});
+        ++input_index;
       }
     }
     while (tdigest_index < td.size()) {
-      merger_.Add(td[tdigest_index++]);
+      merger_.Add(td[tdigest_index]);
+      ++tdigest_index;
     }
     while (input_index < input.size()) {
-      merger_.Add(Centroid{input[input_index++], 1});
+      merger_.Add(Centroid{input[input_index], 1});
+      ++input_index;
     }
     merger_.Reset(0, nullptr);
     current_ = 1 - current_;
@@ -270,7 +277,7 @@ class TDigestImpl {
   double Quantile(double q) const {
     const auto& td = tdigests_[current_];
 
-    if (q < 0 || q > 1 || td.size() == 0) {
+    if (q < 0 || q > 1 || td.empty()) {
       return NAN;
     }
 
@@ -301,7 +308,8 @@ class TDigestImpl {
     }
 
     // find adjacent centroids for interpolation
-    uint32_t ci_left = ci, ci_right = ci;
+    uint32_t ci_left = ci;
+    uint32_t ci_right = ci;
     if (diff > 0) {
       if (ci_right == td.size() - 1) {
         // index larger than center of last bin
@@ -343,7 +351,8 @@ class TDigestImpl {
 
   TDigestMerger<> merger_;
   double total_weight_;
-  double min_, max_;
+  double min_;
+  double max_;
 
   // ping-pong buffer holds two tdigests, size = 2 * delta * sizeof(Centroid)
   std::vector<Centroid> tdigests_[2];
@@ -367,7 +376,6 @@ class TDigest {
   CentroidsWithDelta DumpCentroids() const;
 
  private:
-  // class TDigestImpl;
   TDigestImpl impl_;
 };
 

@@ -69,10 +69,8 @@ class DummyCentroids {
       return iter_ != centroids_.cend();
     }
     bool Prev() {
-      if (Valid()) {
-        if (iter_ != centroids_.cbegin()) {
-          std::advance(iter_, -1);
-        }
+      if (Valid() && iter_ != centroids_.cbegin()) {
+        std::advance(iter_, -1);
       }
       return Valid();
     }
@@ -109,8 +107,8 @@ class DummyCentroids {
 uint32_t constexpr kMaxElements = 1 * 1024;  // 1k doubles
 uint32_t constexpr kMaxCompression = 1000;   // limit the compression to 1k
 
-std::optional<rocksdb::Status> TDigest::Create(engine::Context& ctx, const Slice& digest_name,
-                                               const TDigestCreateOptions& options) {
+rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
+                                bool* exsits) {
   if (options.compression > kMaxCompression) {
     return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kMaxCompression));
   }
@@ -122,8 +120,9 @@ std::optional<rocksdb::Status> TDigest::Create(engine::Context& ctx, const Slice
 
   LockGuard guard(storage_->GetLockManager(), ns_key);
   auto status = GetMetaData(ctx, ns_key, &metadata);
-  if (status.ok()) {
-    return {};
+  *exsits = status.ok();
+  if (*exsits) {
+    return rocksdb::Status::InvalidArgument("tdigest already exists");
   }
 
   if (!status.IsNotFound()) {
@@ -132,18 +131,19 @@ std::optional<rocksdb::Status> TDigest::Create(engine::Context& ctx, const Slice
 
   auto batch = storage_->GetWriteBatchBase();
   WriteBatchLogData log_data(kRedisTDigest);
-  if (auto status = batch->PutLogData(log_data.Encode()); !status.ok()) {
+  if (status = batch->PutLogData(log_data.Encode()); !status.ok()) {
     return status;
   }
 
   std::string metadata_bytes;
   metadata.Encode(&metadata_bytes);
-  if (auto status = batch->Put(metadata_cf_handle_, ns_key, metadata_bytes); !status.ok()) {
+  if (status = batch->Put(metadata_cf_handle_, ns_key, metadata_bytes); !status.ok()) {
     return status;
   }
 
   return storage_->Write(ctx, storage_->DefaultWriteOptions(), batch->GetWriteBatch());
 }
+
 rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& inputs) {
   auto ns_key = AppendNamespacePrefix(digest_name);
   LockGuard guard(storage_->GetLockManager(), ns_key);
@@ -193,27 +193,29 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
       return status;
     }
 
-    auto batch = storage_->GetWriteBatchBase();
-    WriteBatchLogData log_data(kRedisTDigest);
-    if (auto status = batch->PutLogData(log_data.Encode()); !status.ok()) {
-      return status;
-    }
+    if (metadata.unmerged_nodes > 0) {
+      auto batch = storage_->GetWriteBatchBase();
+      WriteBatchLogData log_data(kRedisTDigest);
+      if (auto status = batch->PutLogData(log_data.Encode()); !status.ok()) {
+        return status;
+      }
 
-    if (auto status = mergeCurrentBuffer(ctx, ns_key, batch, &metadata); !status.ok()) {
-      return status;
-    }
+      if (auto status = mergeCurrentBuffer(ctx, ns_key, batch, &metadata); !status.ok()) {
+        return status;
+      }
 
-    std::string metadata_bytes;
-    metadata.Encode(&metadata_bytes);
-    if (auto status = batch->Put(metadata_cf_handle_, ns_key, metadata_bytes); !status.ok()) {
-      return status;
-    }
+      std::string metadata_bytes;
+      metadata.Encode(&metadata_bytes);
+      if (auto status = batch->Put(metadata_cf_handle_, ns_key, metadata_bytes); !status.ok()) {
+        return status;
+      }
 
-    if (auto status = storage_->Write(ctx, storage_->DefaultWriteOptions(), batch->GetWriteBatch()); !status.ok()) {
-      return status;
-    }
+      if (auto status = storage_->Write(ctx, storage_->DefaultWriteOptions(), batch->GetWriteBatch()); !status.ok()) {
+        return status;
+      }
 
-    ctx.RefreshLatestSnapshot();
+      ctx.RefreshLatestSnapshot();
+    }
   }
 
   std::vector<Centroid> centroids;
@@ -363,7 +365,7 @@ rocksdb::Status TDigest::dumpCentroidsAndBuffer(engine::Context& ctx, const std:
     }
 
     if (clean_after_dump_batch != nullptr) {
-      if (auto status = (*clean_after_dump_batch)->Delete(cf_handle_, buffer_key); !status.ok()) {
+      if (status = (*clean_after_dump_batch)->Delete(cf_handle_, buffer_key); !status.ok()) {
         return status;
       }
     }
@@ -396,8 +398,8 @@ rocksdb::Status TDigest::dumpCentroidsAndBuffer(engine::Context& ctx, const std:
   }
 
   if (centroids->size() != metadata.merged_nodes) {
-    return rocksdb::Status::Corruption(
-        fmt::format("metadata has {} merged nodes, but got {}", metadata.merged_nodes, centroids->size()));
+    LOG(ERROR) << "metadata has " << metadata.merged_nodes << " merged nodes, but got " << centroids->size();
+    return rocksdb::Status::Corruption("centroids count mismatch with metadata");
   }
   return rocksdb::Status::OK();
 }
@@ -417,7 +419,7 @@ rocksdb::Status TDigest::applyNewCentroids(ObserverOrUniquePtr<rocksdb::WriteBat
 }
 
 std::string TDigest::internalSegmentGuardPrefixKey(const TDigestMetadata& metadata, const std::string& ns_key,
-                                                   SegmentType seg) {
+                                                   SegmentType seg) const {
   std::string prefix_key;
   PutFixed8(&prefix_key, static_cast<uint8_t>(seg));
   return InternalKey(ns_key, prefix_key, metadata.version, storage_->IsSlotIdEncoded()).Encode();
