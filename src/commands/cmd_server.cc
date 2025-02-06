@@ -239,8 +239,7 @@ class CommandInfo : public Commander {
     for (size_t i = 1; i < args_.size(); ++i) {
       sections.push_back(util::ToLower(args_[i]));
     }
-    std::string info;
-    srv->GetInfo(conn->GetNamespace(), sections, &info);
+    auto info = srv->GetInfo(conn->GetNamespace(), sections);
     *output = conn->VerbatimString("txt", info);
     return Status::OK();
   }
