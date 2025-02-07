@@ -56,11 +56,11 @@ class TDigest : public SubKeyScanner {
    * @param ctx The context of the operation.
    * @param digest_name The name of the t-digest.
    * @param options The options of the t-digest.
-   * @param exsits The output parameter to indicate whether the t-digest already exists.
+   * @param exists The output parameter to indicate whether the t-digest already exists.
    * @return rocksdb::Status
    */
   rocksdb::Status Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
-                         bool* exsits);
+                         bool* exists);
   rocksdb::Status Add(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& inputs);
   rocksdb::Status Quantile(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& qs,
                            TDigestQuantitleResult* result);

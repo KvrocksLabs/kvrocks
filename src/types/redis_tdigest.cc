@@ -108,7 +108,7 @@ uint32_t constexpr kMaxElements = 1 * 1024;  // 1k doubles
 uint32_t constexpr kMaxCompression = 1000;   // limit the compression to 1k
 
 rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
-                                bool* exsits) {
+                                bool* exists) {
   if (options.compression > kMaxCompression) {
     return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kMaxCompression));
   }
@@ -120,8 +120,8 @@ rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, 
 
   LockGuard guard(storage_->GetLockManager(), ns_key);
   auto status = GetMetaData(ctx, ns_key, &metadata);
-  *exsits = status.ok();
-  if (*exsits) {
+  *exists = status.ok();
+  if (*exists) {
     return rocksdb::Status::InvalidArgument("tdigest already exists");
   }
 

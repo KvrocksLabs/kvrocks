@@ -141,13 +141,13 @@ TEST_F(RedisTDigestTest, CentroidTest) {
 
 TEST_F(RedisTDigestTest, Create) {
   std::string test_digest_name = "test_digest_create" + std::to_string(util::GetTimeStampMS());
-  bool exsits = false;
-  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
-  ASSERT_FALSE(exsits);
+  bool exists = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exists);
+  ASSERT_FALSE(exists);
   ASSERT_TRUE(status.ok());
 
-  status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
-  ASSERT_TRUE(exsits);
+  status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exists);
+  ASSERT_TRUE(exists);
   ASSERT_TRUE(status.IsInvalidArgument());
 
   auto ns_key = tdigest_->AppendNamespacePrefix(test_digest_name);
@@ -182,9 +182,9 @@ TEST_F(RedisTDigestTest, Quantile) {
 
 TEST_F(RedisTDigestTest, PlentyQuantile_10000_144) {
   std::string test_digest_name = "test_digest_quantile" + std::to_string(util::GetTimeStampMS());
-  bool exsits = false;
-  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
-  ASSERT_FALSE(exsits);
+  bool exists = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exists);
+  ASSERT_FALSE(exists);
   ASSERT_TRUE(status.ok());
 
   int sample_count = 10000;
@@ -211,9 +211,9 @@ TEST_F(RedisTDigestTest, PlentyQuantile_10000_144) {
 TEST_F(RedisTDigestTest, Add_2_times) {
   std::string test_digest_name = "test_digest_quantile" + std::to_string(util::GetTimeStampMS());
 
-  bool exsits = false;
-  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exsits);
-  ASSERT_FALSE(exsits);
+  bool exists = false;
+  auto status = tdigest_->Create(*ctx_, test_digest_name, {100}, &exists);
+  ASSERT_FALSE(exists);
   ASSERT_TRUE(status.ok());
 
   int sample_count = 17;
