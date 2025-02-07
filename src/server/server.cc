@@ -853,8 +853,8 @@ void Server::cron() {
   }
 }
 
-void Server::GetRocksDBInfo(std::string *info) {
-  if (is_loading_) return;
+std::string Server::GetRocksDBInfo() {
+  if (is_loading_) return "";
 
   std::ostringstream string_stream;
   rocksdb::DB *db = storage->GetDB();
@@ -963,10 +963,10 @@ void Server::GetRocksDBInfo(std::string *info) {
   string_stream << "is_compacting:" << (db_compacting_ ? "yes" : "no") << "\r\n";
   db_job_mu_.unlock();
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetServerInfo(std::string *info) {
+std::string Server::GetServerInfo() {
   static int call_uname = 1;
   static utsname name;
   if (call_uname) {
@@ -998,20 +998,20 @@ void Server::GetServerInfo(std::string *info) {
   int64_t now_secs = util::GetTimeStamp<std::chrono::seconds>();
   string_stream << "uptime_in_seconds:" << now_secs - start_time_secs_ << "\r\n";
   string_stream << "uptime_in_days:" << (now_secs - start_time_secs_) / 86400 << "\r\n";
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetClientsInfo(std::string *info) {
+std::string Server::GetClientsInfo() {
   std::ostringstream string_stream;
   string_stream << "# Clients\r\n";
   string_stream << "maxclients:" << config_->maxclients << "\r\n";
   string_stream << "connected_clients:" << connected_clients_ << "\r\n";
   string_stream << "monitor_clients:" << monitor_clients_ << "\r\n";
   string_stream << "blocked_clients:" << blocked_clients_ << "\r\n";
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetMemoryInfo(std::string *info) {
+std::string Server::GetMemoryInfo() {
   int64_t rss = Stats::GetMemoryRSS();
   int64_t memory_lua = 0;
   for (auto &wt : worker_threads_) {
@@ -1027,11 +1027,11 @@ void Server::GetMemoryInfo(std::string *info) {
   string_stream << "used_memory_lua:" << memory_lua << "\r\n";
   string_stream << "used_memory_lua_human:" << used_memory_lua_human << "\r\n";
   string_stream << "used_memory_startup:" << memory_startup_use_.load(std::memory_order_relaxed) << "\r\n";
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetReplicationInfo(std::string *info) {
-  if (is_loading_) return;
+std::string Server::GetReplicationInfo() {
+  if (is_loading_) return "";
 
   std::ostringstream string_stream;
   string_stream << "# Replication\r\n";
@@ -1067,7 +1067,7 @@ void Server::GetReplicationInfo(std::string *info) {
 
   string_stream << "master_repl_offset:" << latest_seq << "\r\n";
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
 void Server::GetRoleInfo(std::string *info) {
@@ -1139,7 +1139,7 @@ int64_t Server::GetLastBgsaveTime() {
   return last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_;
 }
 
-void Server::GetStatsInfo(std::string *info) {
+std::string Server::GetStatsInfo() {
   std::ostringstream string_stream;
   string_stream << "# Stats\r\n";
   string_stream << "total_connections_received:" << total_clients_ << "\r\n";
@@ -1165,10 +1165,10 @@ void Server::GetStatsInfo(std::string *info) {
     string_stream << "pubsub_patterns:" << pubsub_patterns_.size() << "\r\n";
   }
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetCommandsStatsInfo(std::string *info) {
+std::string Server::GetCommandsStatsInfo() {
   std::ostringstream string_stream;
   string_stream << "# Commandstats\r\n";
 
@@ -1200,19 +1200,19 @@ void Server::GetCommandsStatsInfo(std::string *info) {
     string_stream << "sum=" << sum << ",count=" << calls << "\r\n";
   }
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetClusterInfo(std::string *info) {
+std::string Server::GetClusterInfo() {
   std::ostringstream string_stream;
 
   string_stream << "# Cluster\r\n";
   string_stream << "cluster_enabled:" << config_->cluster_enabled << "\r\n";
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetPersistenceInfo(std::string *info) {
+std::string Server::GetPersistenceInfo() {
   std::ostringstream string_stream;
 
   string_stream << "# Persistence\r\n";
@@ -1225,10 +1225,10 @@ void Server::GetPersistenceInfo(std::string *info) {
   string_stream << "last_bgsave_status:" << last_bgsave_status_ << "\r\n";
   string_stream << "last_bgsave_time_sec:" << last_bgsave_duration_secs_ << "\r\n";
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetCpuInfo(std::string *info) {  // NOLINT(readability-convert-member-functions-to-static)
+std::string Server::GetCpuInfo() {  // NOLINT(readability-convert-member-functions-to-static)
   std::ostringstream string_stream;
 
   rusage self_ru;
@@ -1241,11 +1241,11 @@ void Server::GetCpuInfo(std::string *info) {  // NOLINT(readability-convert-memb
                 << static_cast<float>(self_ru.ru_utime.tv_sec) + static_cast<float>(self_ru.ru_utime.tv_usec / 1000000)
                 << "\r\n";
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
-void Server::GetKeyspaceInfo(const std::string &ns, std::string *info) {
-  if (is_loading_) return;
+std::string Server::GetKeyspaceInfo(const std::string &ns) {
+  if (is_loading_) return "";
 
   std::ostringstream string_stream;
 
@@ -1283,31 +1283,24 @@ void Server::GetKeyspaceInfo(const std::string &ns, std::string *info) {
     string_stream << "used_disk_percent: " << used_disk_percent << "%\r\n";
   }
 
-  *info = string_stream.str();
+  return string_stream.str();
 }
 
 // WARNING: we must not access DB(i.e. RocksDB) when server is loading since
 // DB is closed and the pointer is invalid. Server may crash if we access DB during loading.
 // If you add new fields which access DB into INFO command output, make sure
 // this section can't be shown when loading(i.e. !is_loading_).
-void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sections, std::string *info) {
-  info->clear();
-
-  std::vector<std::pair<std::string, std::function<void(Server *, std::string *)>>> info_funcs = {
-      {"server", &Server::GetServerInfo},
-      {"clients", &Server::GetClientsInfo},
-      {"memory", &Server::GetMemoryInfo},
-      {"persistence", &Server::GetPersistenceInfo},
-      {"stats", &Server::GetStatsInfo},
-      {"replication", &Server::GetReplicationInfo},
-      {"cpu", &Server::GetCpuInfo},
-      {"commandstats", &Server::GetCommandsStatsInfo},
-      {"cluster", &Server::GetClusterInfo},
-      {"keyspace", [&ns](Server *srv, std::string *info) { srv->GetKeyspaceInfo(ns, info); }},
+std::string Server::GetInfo(const std::string &ns, const std::vector<std::string> &sections) {
+  std::vector<std::pair<std::string, std::function<std::string(Server *)>>> info_funcs = {
+      {"server", &Server::GetServerInfo},   {"clients", &Server::GetClientsInfo},
+      {"memory", &Server::GetMemoryInfo},   {"persistence", &Server::GetPersistenceInfo},
+      {"stats", &Server::GetStatsInfo},     {"replication", &Server::GetReplicationInfo},
+      {"cpu", &Server::GetCpuInfo},         {"commandstats", &Server::GetCommandsStatsInfo},
+      {"cluster", &Server::GetClusterInfo}, {"keyspace", [&ns](Server *srv) { return srv->GetKeyspaceInfo(ns); }},
       {"rocksdb", &Server::GetRocksDBInfo},
   };
 
-  std::stringstream string_stream;
+  std::string info_str;
 
   bool all = sections.empty() || std::find(sections.begin(), sections.end(), "all") != sections.end();
 
@@ -1317,15 +1310,13 @@ void Server::GetInfo(const std::string &ns, const std::vector<std::string> &sect
       if (first)
         first = false;
       else
-        string_stream << "\r\n";
+        info_str.append("\r\n");
 
-      std::string out;
-      fn(this, &out);
-      string_stream << out;
+      info_str.append(fn(this));
     }
   }
 
-  *info = string_stream.str();
+  return info_str;
 }
 
 std::string Server::GetRocksDBStatsJson() const {

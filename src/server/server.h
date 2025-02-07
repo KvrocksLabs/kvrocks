@@ -232,19 +232,19 @@ class Server {
 
   static int64_t GetCachedUnixTime();
   int64_t GetLastBgsaveTime();
-  void GetStatsInfo(std::string *info);
-  void GetServerInfo(std::string *info);
-  void GetMemoryInfo(std::string *info);
-  void GetRocksDBInfo(std::string *info);
-  void GetClientsInfo(std::string *info);
-  void GetReplicationInfo(std::string *info);
   void GetRoleInfo(std::string *info);
-  void GetCommandsStatsInfo(std::string *info);
-  void GetClusterInfo(std::string *info);
-  void GetPersistenceInfo(std::string *info);
-  void GetCpuInfo(std::string *info);
-  void GetKeyspaceInfo(const std::string &ns, std::string *info);
-  void GetInfo(const std::string &ns, const std::vector<std::string> &sections, std::string *info);
+  std::string GetStatsInfo();
+  std::string GetServerInfo();
+  std::string GetMemoryInfo();
+  std::string GetRocksDBInfo();
+  std::string GetClientsInfo();
+  std::string GetReplicationInfo();
+  std::string GetCommandsStatsInfo();
+  std::string GetClusterInfo();
+  std::string GetPersistenceInfo();
+  std::string GetCpuInfo();
+  std::string GetKeyspaceInfo(const std::string &ns);
+  std::string GetInfo(const std::string &ns, const std::vector<std::string> &sections);
   std::string GetRocksDBStatsJson() const;
   ReplState GetReplicationState();
 
