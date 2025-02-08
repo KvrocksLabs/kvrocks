@@ -1251,8 +1251,9 @@ std::string Server::GetKeyspaceInfo(const std::string &ns) {
 
   KeyNumStats stats;
   GetLatestKeyNumStats(ns, &stats);
-
   auto last_dbsize_scan_timestamp = static_cast<time_t>(GetLastScanTime(ns));
+
+  string_stream << "# Keyspace\r\n";
   string_stream << "last_dbsize_scan_timestamp:" << last_dbsize_scan_timestamp << "\r\n";
   string_stream << "db0:keys=" << stats.n_key << ",expires=" << stats.n_expires << ",avg_ttl=" << stats.avg_ttl
                 << ",expired=" << stats.n_expired << "\r\n";
