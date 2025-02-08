@@ -1251,18 +1251,10 @@ std::string Server::GetKeyspaceInfo(const std::string &ns) {
 
   KeyNumStats stats;
   GetLatestKeyNumStats(ns, &stats);
-
-  // FIXME(mwish): output still requires std::tm.
-  auto last_scan_time = static_cast<time_t>(GetLastScanTime(ns));
-  std::tm last_scan_tm{};
-  localtime_r(&last_scan_time, &last_scan_tm);
+  auto last_dbsize_scan_timestamp = static_cast<time_t>(GetLastScanTime(ns));
 
   string_stream << "# Keyspace\r\n";
-  if (last_scan_time == 0) {
-    string_stream << "# WARN: DBSIZE SCAN never performed yet\r\n";
-  } else {
-    string_stream << "# Last DBSIZE SCAN time: " << std::put_time(&last_scan_tm, "%a %b %e %H:%M:%S %Y") << "\r\n";
-  }
+  string_stream << "last_dbsize_scan_timestamp:" << last_dbsize_scan_timestamp << "\r\n";
   string_stream << "db0:keys=" << stats.n_key << ",expires=" << stats.n_expires << ",avg_ttl=" << stats.avg_ttl
                 << ",expired=" << stats.n_expired << "\r\n";
   string_stream << "sequence:" << storage->GetDB()->GetLatestSequenceNumber() << "\r\n";
