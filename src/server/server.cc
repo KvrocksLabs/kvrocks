@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <iomanip>
 #include <jsoncons/json.hpp>
@@ -43,6 +44,7 @@
 #include "config/config.h"
 #include "fmt/format.h"
 #include "redis_connection.h"
+#include "rocksdb/version.h"
 #include "storage/compaction_checker.h"
 #include "storage/redis_db.h"
 #include "storage/scripting.h"
@@ -970,10 +972,10 @@ Server::InfoEntries Server::GetServerInfo() {
   }
 
   Server::InfoEntries entries;
-  entries.emplace_back("version", VERSION);
+  entries.emplace_back("version", VERSION);  // deprecated
   entries.emplace_back("kvrocks_version", VERSION);
   entries.emplace_back("redis_version", REDIS_VERSION);
-  entries.emplace_back("git_sha1", GIT_COMMIT);
+  entries.emplace_back("git_sha1", GIT_COMMIT);  // deprecated
   entries.emplace_back("kvrocks_git_sha1", GIT_COMMIT);
   entries.emplace_back("redis_mode", (config_->cluster_enabled ? "cluster" : "standalone"));
   entries.emplace_back("kvrocks_mode", (config_->cluster_enabled ? "cluster" : "standalone"));
@@ -985,12 +987,21 @@ Server::InfoEntries Server::GetServerInfo() {
   entries.emplace_back("clang_version",
                        fmt::format("{}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__));
 #endif
+  entries.emplace_back("rocksdb_version", fmt::format("{}.{}.{}", ROCKSDB_MAJOR, ROCKSDB_MINOR, ROCKSDB_PATCH));
   entries.emplace_back("arch_bits", sizeof(void *) * 8);
   entries.emplace_back("process_id", getpid());
   entries.emplace_back("tcp_port", config_->port);
+  entries.emplace_back("server_time_usec", util::GetTimeStampUS());
   int64_t now_secs = util::GetTimeStamp<std::chrono::seconds>();
   entries.emplace_back("uptime_in_seconds", now_secs - start_time_secs_);
   entries.emplace_back("uptime_in_days", (now_secs - start_time_secs_) / 86400);
+#ifdef __linux__
+  if (auto exec_path = realpath("/proc/self/exe", nullptr)) {
+    entries.emplace_back("executable", exec_path);
+    free(exec_path);  // NOLINT(cppcoreguidelines-no-malloc)
+  }
+#endif
+  entries.emplace_back("config_file", config_->ConfigFilePath());
   return entries;
 }
 
