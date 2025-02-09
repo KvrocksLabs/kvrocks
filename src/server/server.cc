@@ -853,10 +853,10 @@ void Server::cron() {
   }
 }
 
-std::string Server::GetRocksDBInfo() {
-  if (is_loading_) return "";
+Server::InfoEntries Server::GetRocksDBInfo() {
+  InfoEntries entries;
+  if (is_loading_) return entries;
 
-  std::ostringstream string_stream;
   rocksdb::DB *db = storage->GetDB();
 
   uint64_t memtable_sizes = 0, cur_memtable_sizes = 0, num_snapshots = 0, num_running_flushes = 0;
@@ -872,18 +872,15 @@ std::string Server::GetRocksDBInfo() {
   db->GetAggregatedIntProperty("rocksdb.compaction-pending", &compaction_pending);
   db->GetAggregatedIntProperty("rocksdb.num-live-versions", &num_live_versions);
 
-  string_stream << "# RocksDB\r\n";
-
   {
     // All column families share the same block cache, so it's good to count a single one.
     uint64_t block_cache_usage = 0;
     uint64_t block_cache_pinned_usage = 0;
     auto subkey_cf_handle = storage->GetCFHandle(ColumnFamilyID::PrimarySubkey);
     db->GetIntProperty(subkey_cf_handle, rocksdb::DB::Properties::kBlockCacheUsage, &block_cache_usage);
-    string_stream << "block_cache_usage:" << block_cache_usage << "\r\n";
+    entries.emplace_back("block_cache_usage", block_cache_usage);
     db->GetIntProperty(subkey_cf_handle, rocksdb::DB::Properties::kBlockCachePinnedUsage, &block_cache_pinned_usage);
-    string_stream << "block_cache_pinned_usage[" << subkey_cf_handle->GetName() << "]:" << block_cache_pinned_usage
-                  << "\r\n";
+    entries.emplace_back("block_cache_pinned_usage[" + subkey_cf_handle->GetName() + "]", block_cache_pinned_usage);
 
     // All column faimilies share the same property of the DB, so it's good to count a single one.
     db->GetIntProperty(subkey_cf_handle, rocksdb::DB::Properties::kNumSnapshots, &num_snapshots);
@@ -896,27 +893,26 @@ std::string Server::GetRocksDBInfo() {
     uint64_t index_and_filter_cache_usage = 0;
     std::map<std::string, std::string> cf_stats_map;
     db->GetIntProperty(cf_handle, rocksdb::DB::Properties::kEstimateNumKeys, &estimate_keys);
-    string_stream << "estimate_keys[" << cf_handle->GetName() << "]:" << estimate_keys << "\r\n";
+    entries.emplace_back("estimate_keys[" + cf_handle->GetName() + "]", estimate_keys);
     db->GetIntProperty(cf_handle, rocksdb::DB::Properties::kEstimateTableReadersMem, &index_and_filter_cache_usage);
-    string_stream << "index_and_filter_cache_usage[" << cf_handle->GetName() << "]:" << index_and_filter_cache_usage
-                  << "\r\n";
+    entries.emplace_back("index_and_filter_cache_usage[" + cf_handle->GetName() + "]", index_and_filter_cache_usage);
     db->GetMapProperty(cf_handle, rocksdb::DB::Properties::kCFStats, &cf_stats_map);
-    string_stream << "level0_file_limit_slowdown[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["l0-file-count-limit-delays"] << "\r\n";
-    string_stream << "level0_file_limit_stop[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["l0-file-count-limit-stops"] << "\r\n";
-    string_stream << "pending_compaction_bytes_slowdown[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["pending-compaction-bytes-delays"] << "\r\n";
-    string_stream << "pending_compaction_bytes_stop[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["pending-compaction-bytes-stops"] << "\r\n";
-    string_stream << "level0_file_limit_stop_with_ongoing_compaction[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["cf-l0-file-count-limit-stops-with-ongoing-compaction"] << "\r\n";
-    string_stream << "level0_file_limit_slowdown_with_ongoing_compaction[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["cf-l0-file-count-limit-delays-with-ongoing-compaction"] << "\r\n";
-    string_stream << "memtable_count_limit_slowdown[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["memtable-limit-delays"] << "\r\n";
-    string_stream << "memtable_count_limit_stop[" << cf_handle->GetName()
-                  << "]:" << cf_stats_map["memtable-limit-stops"] << "\r\n";
+    entries.emplace_back("level0_file_limit_slowdown[" + cf_handle->GetName() + "]",
+                         cf_stats_map["l0-file-count-limit-delays"]);
+    entries.emplace_back("level0_file_limit_stop[" + cf_handle->GetName() + "]",
+                         cf_stats_map["l0-file-count-limit-stops"]);
+    entries.emplace_back("pending_compaction_bytes_slowdown[" + cf_handle->GetName() + "]",
+                         cf_stats_map["pending-compaction-bytes-delays"]);
+    entries.emplace_back("pending_compaction_bytes_stop[" + cf_handle->GetName() + "]",
+                         cf_stats_map["pending-compaction-bytes-stops"]);
+    entries.emplace_back("level0_file_limit_stop_with_ongoing_compaction[" + cf_handle->GetName() + "]",
+                         cf_stats_map["cf-l0-file-count-limit-stops-with-ongoing-compaction"]);
+    entries.emplace_back("level0_file_limit_slowdown_with_ongoing_compaction[" + cf_handle->GetName() + "]",
+                         cf_stats_map["cf-l0-file-count-limit-delays-with-ongoing-compaction"]);
+    entries.emplace_back("memtable_count_limit_slowdown[" + cf_handle->GetName() + "]",
+                         cf_stats_map["memtable-limit-delays"]);
+    entries.emplace_back("memtable_count_limit_stop[" + cf_handle->GetName() + "]",
+                         cf_stats_map["memtable-limit-stops"]);
   }
 
   auto rocksdb_stats = storage->GetDB()->GetDBOptions().statistics;
@@ -932,41 +928,39 @@ std::string Server::GetRocksDBInfo() {
         {"block_cache_data_miss", rocksdb::Tickers::BLOCK_CACHE_DATA_MISS},
     };
     for (const auto &iter : block_cache_stats) {
-      string_stream << iter.first << ":" << rocksdb_stats->getTickerCount(iter.second) << "\r\n";
+      entries.emplace_back(iter.first, rocksdb_stats->getTickerCount(iter.second));
     }
   }
 
-  string_stream << "all_mem_tables:" << memtable_sizes << "\r\n";
-  string_stream << "cur_mem_tables:" << cur_memtable_sizes << "\r\n";
-  string_stream << "snapshots:" << num_snapshots << "\r\n";
-  string_stream << "num_immutable_tables:" << num_immutable_tables << "\r\n";
-  string_stream << "num_running_flushes:" << num_running_flushes << "\r\n";
-  string_stream << "memtable_flush_pending:" << memtable_flush_pending << "\r\n";
-  string_stream << "compaction_pending:" << compaction_pending << "\r\n";
-  string_stream << "num_running_compactions:" << num_running_compaction << "\r\n";
-  string_stream << "num_live_versions:" << num_live_versions << "\r\n";
-  string_stream << "num_super_version:" << num_super_version << "\r\n";
-  string_stream << "num_background_errors:" << num_background_errors << "\r\n";
+  entries.emplace_back("all_mem_tables", memtable_sizes);
+  entries.emplace_back("cur_mem_tables", cur_memtable_sizes);
+  entries.emplace_back("snapshots", num_snapshots);
+  entries.emplace_back("num_immutable_tables", num_immutable_tables);
+  entries.emplace_back("num_running_flushes", num_running_flushes);
+  entries.emplace_back("memtable_flush_pending", memtable_flush_pending);
+  entries.emplace_back("compaction_pending", compaction_pending);
+  entries.emplace_back("num_running_compactions", num_running_compaction);
+  entries.emplace_back("num_live_versions", num_live_versions);
+  entries.emplace_back("num_super_version", num_super_version);
+  entries.emplace_back("num_background_errors", num_background_errors);
   auto db_stats = storage->GetDBStats();
-  string_stream << "flush_count:" << db_stats->flush_count << "\r\n";
-  string_stream << "compaction_count:" << db_stats->compaction_count << "\r\n";
-  string_stream << "put_per_sec:" << stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_PUT) << "\r\n";
-  string_stream << "get_per_sec:"
-                << stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_GET) +
-                       stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_MULTIGET)
-                << "\r\n";
-  string_stream << "seek_per_sec:" << stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_SEEK) << "\r\n";
-  string_stream << "next_per_sec:" << stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_NEXT) << "\r\n";
-  string_stream << "prev_per_sec:" << stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_PREV) << "\r\n";
+  entries.emplace_back("flush_count", db_stats->flush_count.load());
+  entries.emplace_back("compaction_count", db_stats->compaction_count.load());
+  entries.emplace_back("put_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_PUT));
+  entries.emplace_back("get_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_GET) +
+                                          stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_MULTIGET));
+  entries.emplace_back("seek_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_SEEK));
+  entries.emplace_back("next_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_NEXT));
+  entries.emplace_back("prev_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_ROCKSDB_PREV));
   db_job_mu_.lock();
-  string_stream << "is_bgsaving:" << (is_bgsave_in_progress_ ? "yes" : "no") << "\r\n";
-  string_stream << "is_compacting:" << (db_compacting_ ? "yes" : "no") << "\r\n";
+  entries.emplace_back("is_bgsaving", (is_bgsave_in_progress_ ? "yes" : "no"));
+  entries.emplace_back("is_compacting", (db_compacting_ ? "yes" : "no"));
   db_job_mu_.unlock();
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetServerInfo() {
+Server::InfoEntries Server::GetServerInfo() {
   static int call_uname = 1;
   static utsname name;
   if (call_uname) {
@@ -975,43 +969,41 @@ std::string Server::GetServerInfo() {
     call_uname = 0;
   }
 
-  std::ostringstream string_stream;
-  string_stream << "# Server\r\n";
-  string_stream << "version:" << VERSION << "\r\n";
-  string_stream << "kvrocks_version:" << VERSION << "\r\n";
-  string_stream << "redis_version:" << REDIS_VERSION << "\r\n";
-  string_stream << "git_sha1:" << GIT_COMMIT << "\r\n";
-  string_stream << "kvrocks_git_sha1:" << GIT_COMMIT << "\r\n";
-  string_stream << "redis_mode:" << (config_->cluster_enabled ? "cluster" : "standalone") << "\r\n";
-  string_stream << "kvrocks_mode:" << (config_->cluster_enabled ? "cluster" : "standalone") << "\r\n";
-  string_stream << "os:" << name.sysname << " " << name.release << " " << name.machine << "\r\n";
-#ifdef __GNUC__
-  string_stream << "gcc_version:" << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__ << "\r\n";
+  Server::InfoEntries entries;
+  entries.emplace_back("version", VERSION);
+  entries.emplace_back("kvrocks_version", VERSION);
+  entries.emplace_back("redis_version", REDIS_VERSION);
+  entries.emplace_back("git_sha1", GIT_COMMIT);
+  entries.emplace_back("kvrocks_git_sha1", GIT_COMMIT);
+  entries.emplace_back("redis_mode", (config_->cluster_enabled ? "cluster" : "standalone"));
+  entries.emplace_back("kvrocks_mode", (config_->cluster_enabled ? "cluster" : "standalone"));
+  entries.emplace_back("os", fmt::format("{} {} {}", name.sysname, name.release, name.machine));
+#if defined(__GNUC__) && !defined(__clang__)
+  entries.emplace_back("gcc_version", fmt::format("{}.{}.{}", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__));
 #endif
 #ifdef __clang__
-  string_stream << "clang_version:" << __clang_major__ << "." << __clang_minor__ << "." << __clang_patchlevel__
-                << "\r\n";
+  entries.emplace_back("clang_version",
+                       fmt::format("{}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__));
 #endif
-  string_stream << "arch_bits:" << sizeof(void *) * 8 << "\r\n";
-  string_stream << "process_id:" << getpid() << "\r\n";
-  string_stream << "tcp_port:" << config_->port << "\r\n";
+  entries.emplace_back("arch_bits", sizeof(void *) * 8);
+  entries.emplace_back("process_id", getpid());
+  entries.emplace_back("tcp_port", config_->port);
   int64_t now_secs = util::GetTimeStamp<std::chrono::seconds>();
-  string_stream << "uptime_in_seconds:" << now_secs - start_time_secs_ << "\r\n";
-  string_stream << "uptime_in_days:" << (now_secs - start_time_secs_) / 86400 << "\r\n";
-  return string_stream.str();
+  entries.emplace_back("uptime_in_seconds", now_secs - start_time_secs_);
+  entries.emplace_back("uptime_in_days", (now_secs - start_time_secs_) / 86400);
+  return entries;
 }
 
-std::string Server::GetClientsInfo() {
-  std::ostringstream string_stream;
-  string_stream << "# Clients\r\n";
-  string_stream << "maxclients:" << config_->maxclients << "\r\n";
-  string_stream << "connected_clients:" << connected_clients_ << "\r\n";
-  string_stream << "monitor_clients:" << monitor_clients_ << "\r\n";
-  string_stream << "blocked_clients:" << blocked_clients_ << "\r\n";
-  return string_stream.str();
+Server::InfoEntries Server::GetClientsInfo() {
+  InfoEntries entries;
+  entries.emplace_back("maxclients", config_->maxclients);
+  entries.emplace_back("connected_clients", connected_clients_.load());
+  entries.emplace_back("monitor_clients", monitor_clients_.load());
+  entries.emplace_back("blocked_clients", blocked_clients_.load());
+  return entries;
 }
 
-std::string Server::GetMemoryInfo() {
+Server::InfoEntries Server::GetMemoryInfo() {
   int64_t rss = Stats::GetMemoryRSS();
   int64_t memory_lua = 0;
   for (auto &wt : worker_threads_) {
@@ -1020,57 +1012,55 @@ std::string Server::GetMemoryInfo() {
   std::string used_memory_rss_human = util::BytesToHuman(rss);
   std::string used_memory_lua_human = util::BytesToHuman(memory_lua);
 
-  std::ostringstream string_stream;
-  string_stream << "# Memory\r\n";
-  string_stream << "used_memory_rss:" << rss << "\r\n";
-  string_stream << "used_memory_rss_human:" << used_memory_rss_human << "\r\n";
-  string_stream << "used_memory_lua:" << memory_lua << "\r\n";
-  string_stream << "used_memory_lua_human:" << used_memory_lua_human << "\r\n";
-  string_stream << "used_memory_startup:" << memory_startup_use_.load(std::memory_order_relaxed) << "\r\n";
-  return string_stream.str();
+  InfoEntries entries;
+  entries.emplace_back("used_memory_rss", rss);
+  entries.emplace_back("used_memory_rss_human", used_memory_rss_human);
+  entries.emplace_back("used_memory_lua", memory_lua);
+  entries.emplace_back("used_memory_lua_human", used_memory_lua_human);
+  entries.emplace_back("used_memory_startup", memory_startup_use_.load(std::memory_order_relaxed));
+  return entries;
 }
 
-std::string Server::GetReplicationInfo() {
-  if (is_loading_) return "";
+Server::InfoEntries Server::GetReplicationInfo() {
+  InfoEntries entries;
+  if (is_loading_) return entries;
 
-  std::ostringstream string_stream;
-  string_stream << "# Replication\r\n";
-  string_stream << "role:" << (IsSlave() ? "slave" : "master") << "\r\n";
+  entries.emplace_back("role", (IsSlave() ? "slave" : "master"));
   if (IsSlave()) {
     int64_t now_secs = util::GetTimeStamp<std::chrono::seconds>();
-    string_stream << "master_host:" << master_host_ << "\r\n";
-    string_stream << "master_port:" << master_port_ << "\r\n";
+    entries.emplace_back("master_host", master_host_);
+    entries.emplace_back("master_port", master_port_);
     ReplState state = GetReplicationState();
-    string_stream << "master_link_status:" << (state == kReplConnected ? "up" : "down") << "\r\n";
-    string_stream << "master_sync_unrecoverable_error:" << (state == kReplError ? "yes" : "no") << "\r\n";
-    string_stream << "master_sync_in_progress:" << (state == kReplFetchMeta || state == kReplFetchSST) << "\r\n";
-    string_stream << "master_last_io_seconds_ago:" << now_secs - replication_thread_->LastIOTimeSecs() << "\r\n";
-    string_stream << "slave_repl_offset:" << storage->LatestSeqNumber() << "\r\n";
-    string_stream << "slave_priority:" << config_->slave_priority << "\r\n";
+    entries.emplace_back("master_link_status", (state == kReplConnected ? "up" : "down"));
+    entries.emplace_back("master_sync_unrecoverable_error", (state == kReplError ? "yes" : "no"));
+    entries.emplace_back("master_sync_in_progress", (state == kReplFetchMeta || state == kReplFetchSST));
+    entries.emplace_back("master_last_io_seconds_ago", now_secs - replication_thread_->LastIOTimeSecs());
+    entries.emplace_back("slave_repl_offset", storage->LatestSeqNumber());
+    entries.emplace_back("slave_priority", config_->slave_priority);
   }
 
   int idx = 0;
   rocksdb::SequenceNumber latest_seq = storage->LatestSeqNumber();
 
   slave_threads_mu_.lock();
-  string_stream << "connected_slaves:" << slave_threads_.size() << "\r\n";
+  entries.emplace_back("connected_slaves", slave_threads_.size());
   for (const auto &slave : slave_threads_) {
     if (slave->IsStopped()) continue;
 
-    string_stream << "slave" << std::to_string(idx) << ":";
-    string_stream << "ip=" << slave->GetConn()->GetAnnounceIP() << ",port=" << slave->GetConn()->GetAnnouncePort()
-                  << ",offset=" << slave->GetCurrentReplSeq() << ",lag=" << latest_seq - slave->GetCurrentReplSeq()
-                  << "\r\n";
+    entries.emplace_back("slave" + std::to_string(idx),
+                         fmt::format("ip={},port={},offset={},lag={}", slave->GetConn()->GetAnnounceIP(),
+                                     slave->GetConn()->GetAnnouncePort(), slave->GetCurrentReplSeq(),
+                                     latest_seq - slave->GetCurrentReplSeq()));
     ++idx;
   }
   slave_threads_mu_.unlock();
 
-  string_stream << "master_repl_offset:" << latest_seq << "\r\n";
+  entries.emplace_back("master_repl_offset", latest_seq);
 
-  return string_stream.str();
+  return entries;
 }
 
-void Server::GetRoleInfo(std::string *info) {
+std::string Server::GetRoleInfo() {
   if (IsSlave()) {
     std::vector<std::string> roles;
     roles.emplace_back("slave");
@@ -1086,7 +1076,7 @@ void Server::GetRoleInfo(std::string *info) {
       roles.emplace_back("connecting");
     }
     roles.emplace_back(std::to_string(storage->LatestSeqNumber()));
-    *info = redis::ArrayOfBulkStrings(roles);
+    return redis::ArrayOfBulkStrings(roles);
   } else {
     std::vector<std::string> list;
 
@@ -1106,12 +1096,14 @@ void Server::GetRoleInfo(std::string *info) {
     if (list.size() > 0) {
       multi_len = 3;
     }
-    info->append(redis::MultiLen(multi_len));
-    info->append(redis::BulkString("master"));
-    info->append(redis::BulkString(std::to_string(storage->LatestSeqNumber())));
+    std::string info;
+    info.append(redis::MultiLen(multi_len));
+    info.append(redis::BulkString("master"));
+    info.append(redis::BulkString(std::to_string(storage->LatestSeqNumber())));
     if (list.size() > 0) {
-      info->append(redis::Array(list));
+      info.append(redis::Array(list));
     }
+    return info;
   }
 }
 
@@ -1139,46 +1131,45 @@ int64_t Server::GetLastBgsaveTime() {
   return last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_;
 }
 
-std::string Server::GetStatsInfo() {
-  std::ostringstream string_stream;
-  string_stream << "# Stats\r\n";
-  string_stream << "total_connections_received:" << total_clients_ << "\r\n";
-  string_stream << "total_commands_processed:" << stats.total_calls << "\r\n";
-  string_stream << "instantaneous_ops_per_sec:" << stats.GetInstantaneousMetric(STATS_METRIC_COMMAND) << "\r\n";
-  string_stream << "total_net_input_bytes:" << stats.in_bytes << "\r\n";
-  string_stream << "total_net_output_bytes:" << stats.out_bytes << "\r\n";
-  string_stream << "instantaneous_input_kbps:"
-                << static_cast<float>(stats.GetInstantaneousMetric(STATS_METRIC_NET_INPUT) / 1024) << "\r\n";
-  string_stream << "instantaneous_output_kbps:"
-                << static_cast<float>(stats.GetInstantaneousMetric(STATS_METRIC_NET_OUTPUT) / 1024) << "\r\n";
-  string_stream << "sync_full:" << stats.fullsync_count << "\r\n";
-  string_stream << "sync_partial_ok:" << stats.psync_ok_count << "\r\n";
-  string_stream << "sync_partial_err:" << stats.psync_err_count << "\r\n";
+Server::InfoEntries Server::GetStatsInfo() {
+  Server::InfoEntries entries;
+  entries.emplace_back("total_connections_received", total_clients_.load());
+  entries.emplace_back("total_commands_processed", stats.total_calls.load());
+  entries.emplace_back("instantaneous_ops_per_sec", stats.GetInstantaneousMetric(STATS_METRIC_COMMAND));
+  entries.emplace_back("total_net_input_bytes", stats.in_bytes.load());
+  entries.emplace_back("total_net_output_bytes", stats.out_bytes.load());
+  entries.emplace_back("instantaneous_input_kbps",
+                       static_cast<float>(stats.GetInstantaneousMetric(STATS_METRIC_NET_INPUT) / 1024));
+  entries.emplace_back("instantaneous_output_kbps",
+                       static_cast<float>(stats.GetInstantaneousMetric(STATS_METRIC_NET_OUTPUT) / 1024));
+  entries.emplace_back("sync_full", stats.fullsync_count.load());
+  entries.emplace_back("sync_partial_ok", stats.psync_ok_count.load());
+  entries.emplace_back("sync_partial_err", stats.psync_err_count.load());
 
   auto db_stats = storage->GetDBStats();
-  string_stream << "keyspace_hits:" << db_stats->keyspace_hits << "\r\n";
-  string_stream << "keyspace_misses:" << db_stats->keyspace_misses << "\r\n";
+  entries.emplace_back("keyspace_hits", db_stats->keyspace_hits.load());
+  entries.emplace_back("keyspace_misses", db_stats->keyspace_misses.load());
 
   {
     std::lock_guard<std::mutex> lg(pubsub_channels_mu_);
-    string_stream << "pubsub_channels:" << pubsub_channels_.size() << "\r\n";
-    string_stream << "pubsub_patterns:" << pubsub_patterns_.size() << "\r\n";
+    entries.emplace_back("pubsub_channels", pubsub_channels_.size());
+    entries.emplace_back("pubsub_patterns", pubsub_patterns_.size());
   }
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetCommandsStatsInfo() {
-  std::ostringstream string_stream;
-  string_stream << "# Commandstats\r\n";
+Server::InfoEntries Server::GetCommandsStatsInfo() {
+  InfoEntries entries;
 
   for (const auto &cmd_stat : stats.commands_stats) {
     auto calls = cmd_stat.second.calls.load();
     if (calls == 0) continue;
 
     auto latency = cmd_stat.second.latency.load();
-    string_stream << "cmdstat_" << cmd_stat.first << ":calls=" << calls << ",usec=" << latency
-                  << ",usec_per_call=" << static_cast<float>(latency / calls) << "\r\n";
+    entries.emplace_back("cmdstat_" + cmd_stat.first,
+                         fmt::format("calls={},usec={},usec_per_call={}", calls, latency,
+                                     static_cast<double>(latency) / static_cast<double>(calls)));
   }
 
   for (const auto &cmd_hist : stats.commands_histogram) {
@@ -1187,7 +1178,7 @@ std::string Server::GetCommandsStatsInfo() {
     if (calls == 0) continue;
 
     auto sum = stats.commands_histogram[command_name].sum.load();
-    string_stream << "cmdstathist_" << command_name << ":";
+    std::string result;
     for (std::size_t i{0}; i < stats.commands_histogram[command_name].buckets.size(); ++i) {
       auto bucket_value = stats.commands_histogram[command_name].buckets[i]->load();
       auto bucket_bound = std::numeric_limits<double>::infinity();
@@ -1195,87 +1186,82 @@ std::string Server::GetCommandsStatsInfo() {
         bucket_bound = stats.bucket_boundaries[i];
       }
 
-      string_stream << bucket_bound << "=" << bucket_value << ",";
+      result.append(fmt::format("{}={},", bucket_bound, bucket_value));
     }
-    string_stream << "sum=" << sum << ",count=" << calls << "\r\n";
+    result.append(fmt::format("sum={},count={}", sum, calls));
+
+    entries.emplace_back("cmdstathist_" + command_name, result);
   }
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetClusterInfo() {
-  std::ostringstream string_stream;
+Server::InfoEntries Server::GetClusterInfo() {
+  InfoEntries entries;
 
-  string_stream << "# Cluster\r\n";
-  string_stream << "cluster_enabled:" << config_->cluster_enabled << "\r\n";
+  entries.emplace_back("cluster_enabled", config_->cluster_enabled);
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetPersistenceInfo() {
-  std::ostringstream string_stream;
+Server::InfoEntries Server::GetPersistenceInfo() {
+  InfoEntries entries;
 
-  string_stream << "# Persistence\r\n";
-  string_stream << "loading:" << is_loading_ << "\r\n";
+  entries.emplace_back("loading", is_loading_.load());
 
   std::lock_guard<std::mutex> lg(db_job_mu_);
-  string_stream << "bgsave_in_progress:" << (is_bgsave_in_progress_ ? 1 : 0) << "\r\n";
-  string_stream << "last_bgsave_time:"
-                << (last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_) << "\r\n";
-  string_stream << "last_bgsave_status:" << last_bgsave_status_ << "\r\n";
-  string_stream << "last_bgsave_time_sec:" << last_bgsave_duration_secs_ << "\r\n";
+  entries.emplace_back("bgsave_in_progress", is_bgsave_in_progress_);
+  entries.emplace_back("last_bgsave_time",
+                       (last_bgsave_timestamp_secs_ == -1 ? start_time_secs_ : last_bgsave_timestamp_secs_));
+  entries.emplace_back("last_bgsave_status", last_bgsave_status_);
+  entries.emplace_back("last_bgsave_time_sec", last_bgsave_duration_secs_);
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetCpuInfo() {  // NOLINT(readability-convert-member-functions-to-static)
-  std::ostringstream string_stream;
+Server::InfoEntries Server::GetCpuInfo() {  // NOLINT(readability-convert-member-functions-to-static)
+  InfoEntries entries;
 
   rusage self_ru;
   getrusage(RUSAGE_SELF, &self_ru);
-  string_stream << "# CPU\r\n";
-  string_stream << "used_cpu_sys:"
-                << static_cast<float>(self_ru.ru_stime.tv_sec) + static_cast<float>(self_ru.ru_stime.tv_usec / 1000000)
-                << "\r\n";
-  string_stream << "used_cpu_user:"
-                << static_cast<float>(self_ru.ru_utime.tv_sec) + static_cast<float>(self_ru.ru_utime.tv_usec / 1000000)
-                << "\r\n";
+  entries.emplace_back("used_cpu_sys", static_cast<float>(self_ru.ru_stime.tv_sec) +
+                                           static_cast<float>(self_ru.ru_stime.tv_usec / 1000000));
+  entries.emplace_back("used_cpu_user", static_cast<float>(self_ru.ru_utime.tv_sec) +
+                                            static_cast<float>(self_ru.ru_utime.tv_usec / 1000000));
 
-  return string_stream.str();
+  return entries;
 }
 
-std::string Server::GetKeyspaceInfo(const std::string &ns) {
-  if (is_loading_) return "";
-
-  std::ostringstream string_stream;
+Server::InfoEntries Server::GetKeyspaceInfo(const std::string &ns) {
+  InfoEntries entries;
+  if (is_loading_) return entries;
 
   KeyNumStats stats;
   GetLatestKeyNumStats(ns, &stats);
   auto last_dbsize_scan_timestamp = static_cast<time_t>(GetLastScanTime(ns));
 
-  string_stream << "# Keyspace\r\n";
-  string_stream << "last_dbsize_scan_timestamp:" << last_dbsize_scan_timestamp << "\r\n";
-  string_stream << "db0:keys=" << stats.n_key << ",expires=" << stats.n_expires << ",avg_ttl=" << stats.avg_ttl
-                << ",expired=" << stats.n_expired << "\r\n";
-  string_stream << "sequence:" << storage->GetDB()->GetLatestSequenceNumber() << "\r\n";
-  string_stream << "used_db_size:" << storage->GetTotalSize(ns) << "\r\n";
-  string_stream << "max_db_size:" << config_->max_db_size * GiB << "\r\n";
+  entries.emplace_back("last_dbsize_scan_timestamp", last_dbsize_scan_timestamp);
+  entries.emplace_back("db0", fmt::format("keys={},expires={},avg_ttl={},expired={}", stats.n_key, stats.n_expires,
+                                          stats.avg_ttl, stats.n_expired));
+  entries.emplace_back("sequence", storage->GetDB()->GetLatestSequenceNumber());
+  entries.emplace_back("used_db_size", storage->GetTotalSize(ns));
+  entries.emplace_back("max_db_size", config_->max_db_size * GiB);
   double used_percent = config_->max_db_size ? static_cast<double>(storage->GetTotalSize() * 100) /
                                                    static_cast<double>(config_->max_db_size * GiB)
                                              : 0;
-  string_stream << "used_percent: " << used_percent << "%\r\n";
+  entries.emplace_back("used_percent", fmt::format("{}%", used_percent));
 
   struct statvfs stat;
   if (statvfs(config_->db_dir.c_str(), &stat) == 0) {
     auto disk_capacity = stat.f_blocks * stat.f_frsize;
     auto used_disk_size = (stat.f_blocks - stat.f_bavail) * stat.f_frsize;
-    string_stream << "disk_capacity:" << disk_capacity << "\r\n";
-    string_stream << "used_disk_size:" << used_disk_size << "\r\n";
+    entries.emplace_back("disk_capacity", disk_capacity);
+    entries.emplace_back("used_disk_size", used_disk_size);
     double used_disk_percent = static_cast<double>(used_disk_size * 100) / static_cast<double>(disk_capacity);
-    string_stream << "used_disk_percent: " << used_disk_percent << "%\r\n";
+    entries.emplace_back("used_disk_percent", fmt::format("{}%", used_disk_percent));
   }
 
-  return string_stream.str();
+  return entries;
 }
 
 // WARNING: we must not access DB(i.e. RocksDB) when server is loading since
@@ -1283,28 +1269,32 @@ std::string Server::GetKeyspaceInfo(const std::string &ns) {
 // If you add new fields which access DB into INFO command output, make sure
 // this section can't be shown when loading(i.e. !is_loading_).
 std::string Server::GetInfo(const std::string &ns, const std::vector<std::string> &sections) {
-  std::vector<std::pair<std::string, std::function<std::string(Server *)>>> info_funcs = {
-      {"server", &Server::GetServerInfo},   {"clients", &Server::GetClientsInfo},
-      {"memory", &Server::GetMemoryInfo},   {"persistence", &Server::GetPersistenceInfo},
-      {"stats", &Server::GetStatsInfo},     {"replication", &Server::GetReplicationInfo},
-      {"cpu", &Server::GetCpuInfo},         {"commandstats", &Server::GetCommandsStatsInfo},
-      {"cluster", &Server::GetClusterInfo}, {"keyspace", [&ns](Server *srv) { return srv->GetKeyspaceInfo(ns); }},
-      {"rocksdb", &Server::GetRocksDBInfo},
+  std::vector<std::pair<std::string, std::function<InfoEntries(Server *)>>> info_funcs = {
+      {"Server", &Server::GetServerInfo},   {"Clients", &Server::GetClientsInfo},
+      {"Memory", &Server::GetMemoryInfo},   {"Persistence", &Server::GetPersistenceInfo},
+      {"Stats", &Server::GetStatsInfo},     {"Replication", &Server::GetReplicationInfo},
+      {"CPU", &Server::GetCpuInfo},         {"CommandStats", &Server::GetCommandsStatsInfo},
+      {"Cluster", &Server::GetClusterInfo}, {"Keyspace", [&ns](Server *srv) { return srv->GetKeyspaceInfo(ns); }},
+      {"RocksDB", &Server::GetRocksDBInfo},
   };
 
   std::string info_str;
 
-  bool all = sections.empty() || std::find(sections.begin(), sections.end(), "all") != sections.end();
+  bool all = sections.empty() || util::FindICase(sections.begin(), sections.end(), "all") != sections.end();
 
   bool first = true;
   for (const auto &[sec, fn] : info_funcs) {
-    if (all || std::find(sections.begin(), sections.end(), sec) != sections.end()) {
+    if (all || util::FindICase(sections.begin(), sections.end(), sec) != sections.end()) {
       if (first)
         first = false;
       else
         info_str.append("\r\n");
 
-      info_str.append(fn(this));
+      info_str.append("# " + sec + "\r\n");
+
+      for (const auto &entry : fn(this)) {
+        info_str.append(fmt::format("{}:{}\r\n", entry.name, entry.val));
+      }
     }
   }
 

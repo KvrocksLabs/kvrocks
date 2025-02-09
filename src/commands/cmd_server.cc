@@ -237,7 +237,7 @@ class CommandInfo : public Commander {
   Status Execute([[maybe_unused]] engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
     std::vector<std::string> sections;
     for (size_t i = 1; i < args_.size(); ++i) {
-      sections.push_back(util::ToLower(args_[i]));
+      sections.push_back(args_[i]);
     }
     auto info = srv->GetInfo(conn->GetNamespace(), sections);
     *output = conn->VerbatimString("txt", info);
@@ -282,7 +282,7 @@ class CommandRole : public Commander {
  public:
   Status Execute([[maybe_unused]] engine::Context &ctx, Server *srv, [[maybe_unused]] Connection *conn,
                  std::string *output) override {
-    srv->GetRoleInfo(output);
+    *output = srv->GetRoleInfo();
     return Status::OK();
   }
 };

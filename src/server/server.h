@@ -33,6 +33,7 @@
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -232,18 +233,32 @@ class Server {
 
   static int64_t GetCachedUnixTime();
   int64_t GetLastBgsaveTime();
-  void GetRoleInfo(std::string *info);
-  std::string GetStatsInfo();
-  std::string GetServerInfo();
-  std::string GetMemoryInfo();
-  std::string GetRocksDBInfo();
-  std::string GetClientsInfo();
-  std::string GetReplicationInfo();
-  std::string GetCommandsStatsInfo();
-  std::string GetClusterInfo();
-  std::string GetPersistenceInfo();
-  std::string GetCpuInfo();
-  std::string GetKeyspaceInfo(const std::string &ns);
+  std::string GetRoleInfo();
+
+  struct InfoEntry {
+    std::string name;
+    std::string val;
+
+    InfoEntry(std::string name, std::string val) : name(std::move(name)), val(std::move(val)) {}
+    InfoEntry(std::string name, std::string_view val) : name(std::move(name)), val(val.begin(), val.end()) {}
+    InfoEntry(std::string name, const char *val) : name(std::move(name)), val(val) {}
+    template <typename T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    InfoEntry(std::string name, T v) : name(std::move(name)), val(std::to_string(v)) {}
+  };
+  using InfoEntries = std::vector<InfoEntry>;
+
+  InfoEntries GetStatsInfo();
+  InfoEntries GetServerInfo();
+  InfoEntries GetMemoryInfo();
+  InfoEntries GetRocksDBInfo();
+  InfoEntries GetClientsInfo();
+  InfoEntries GetReplicationInfo();
+  InfoEntries GetCommandsStatsInfo();
+  InfoEntries GetClusterInfo();
+  InfoEntries GetPersistenceInfo();
+  InfoEntries GetCpuInfo();
+  InfoEntries GetKeyspaceInfo(const std::string &ns);
+
   std::string GetInfo(const std::string &ns, const std::vector<std::string> &sections);
   std::string GetRocksDBStatsJson() const;
   ReplState GetReplicationState();
