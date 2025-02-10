@@ -221,7 +221,7 @@ class CommandSubStr : public CommandGetRange {
 class CommandSetRange : public Commander {
  public:
   Status Parse(const std::vector<std::string> &args) override {
-    auto parse_result = ParseInt<int>(args[2], 10);
+    auto parse_result = ParseInt<int>(args[2], {0, INT32_MAX}, 10);
     if (!parse_result) {
       return {Status::RedisParseErr, errValueNotInteger};
     }
@@ -233,6 +233,11 @@ class CommandSetRange : public Commander {
   Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
     uint64_t ret = 0;
     redis::String string_db(srv->storage, conn->GetNamespace());
+
+    auto total = offset_ + args_[3].size();
+    if (total > srv->GetConfig()->proto_max_bulk_len) {
+      return {Status::RedisExecErr, "string exceeds maximum allowed size"};
+    }
 
     auto s = string_db.SetRange(ctx, args_[1], offset_, args_[3], &ret);
     if (!s.ok()) {
