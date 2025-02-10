@@ -54,6 +54,14 @@ func TestInfo(t *testing.T) {
 		return i
 	}
 
+	t.Run("check last dbsize scan timestamp", func(t *testing.T) {
+		require.Equal(t, "0", util.FindInfoEntry(rdb, "last_dbsize_scan_timestamp", "keyspace"))
+		require.NoError(t, rdb.Do(ctx, "DBSIZE", "SCAN").Err())
+		require.Eventually(t, func() bool {
+			return MustAtoi(t, util.FindInfoEntry(rdb, "last_dbsize_scan_timestamp", "keyspace")) > 0
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
 	t.Run("get rocksdb ops by INFO", func(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			k := fmt.Sprintf("key%d", i)
@@ -118,6 +126,13 @@ func TestInfo(t *testing.T) {
 		require.Contains(t, splitValues, "sum")
 		require.Contains(t, splitValues, "count")
 		require.Contains(t, splitValues, "inf")
+	})
+
+	t.Run("multiple sections", func(t *testing.T) {
+		info := rdb.Info(ctx, "server", "cpu")
+		require.NoError(t, info.Err())
+		require.Contains(t, info.Val(), "# Server")
+		require.Contains(t, info.Val(), "# CPU")
 	})
 }
 

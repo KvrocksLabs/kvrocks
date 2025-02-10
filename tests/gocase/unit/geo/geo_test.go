@@ -87,6 +87,16 @@ func compareLists(list1, list2 []string) []string {
 	return result
 }
 
+type item struct {
+	seed int64
+	km   int64
+	lon  float64
+	lat  float64
+}
+
+var geoAddAndGeoRangeClients []*redis.Client
+var geoAddAndGeoRangeservers []*util.KvrocksServer
+
 func TestGeo(t *testing.T) {
 	configOptions := []util.ConfigOptions{
 		{
@@ -103,8 +113,139 @@ func TestGeo(t *testing.T) {
 
 	configsMatrix, err := util.GenerateConfigsMatrix(configOptions)
 	require.NoError(t, err)
+	regressionVectors := []item{
+		{1482225976969, 7083, 81.634948934258375, 30.561509253718668},
+		{1482340074151, 5416, -70.863281847379767, -46.347003465679947},
+		{1499014685896, 6064, -89.818768962202014, -40.463868561416803},
+		{1412, 156, 149.29737817929004, 15.95807862745508},
+		{441574, 143, 59.235461856813856, 66.269555127373678},
+		{160645, 187, -101.88575239939883, 49.061997951502917},
+		{750269, 154, -90.187939661642517, 66.615930412251487},
+		{342880, 145, 163.03472387745728, 64.012747720821181},
+		{729955, 143, 137.86663517256579, 63.986745399416776},
+		{939895, 151, 59.149620271823181, 65.204186651485145},
+		{1412, 156, 149.29737817929004, 15.95807862745508},
+		{564862, 149, 84.062063109158544, -65.685403922426232},
+		{1546032440391, 16751, -1.8175081637769495, 20.665668878082954},
+	}
 
 	for _, configs := range configsMatrix {
+		srv := util.StartServer(t, configs)
+		geoAddAndGeoRangeservers = append(geoAddAndGeoRangeservers, srv)
+		rdb := srv.NewClient()
+		geoAddAndGeoRangeClients = append(geoAddAndGeoRangeClients, rdb)
+	}
+
+	t.Cleanup(func() {
+		for _, srv := range geoAddAndGeoRangeservers {
+			srv.Close()
+		}
+		for _, client := range geoAddAndGeoRangeClients {
+			client.Close()
+		}
+	})
+
+	for i, configs := range configsMatrix {
+		t.Run("TestGeoAddAndGeoRange", func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			rdb := geoAddAndGeoRangeClients[i]
+			for attempt := 0; attempt < 30; attempt++ {
+				var debuginfo string
+				var seed int64
+				if attempt < len(regressionVectors) {
+					seed = regressionVectors[attempt].seed
+				} else {
+					seed = time.Now().UnixNano()
+				}
+				debuginfo += "rand seed is " + strconv.FormatInt(seed, 10)
+
+				require.NoError(t, rdb.Del(ctx, "mypoints").Err())
+				var radiusKm int64
+				if util.RandomIntWithSeed(10, seed) == 0 {
+					radiusKm = util.RandomIntWithSeed(50000, seed) + 10
+				} else {
+					radiusKm = util.RandomIntWithSeed(200, seed) + 10
+				}
+				if attempt < len(regressionVectors) {
+					radiusKm = regressionVectors[attempt].km
+				}
+				radiusM := radiusKm * 1000
+				searchLon, searchLat := geoRandomPointWithSeed(seed)
+				if attempt < len(regressionVectors) {
+					searchLon = regressionVectors[attempt].lon
+					searchLat = regressionVectors[attempt].lat
+				}
+				debuginfo += "Search area: " + strconv.FormatFloat(searchLon, 'f', 10, 64) + "," + strconv.FormatFloat(searchLat, 'f', 10, 64) + " " + strconv.FormatInt(radiusKm, 10) + " km"
+				var result []string
+				var argvs []*redis.GeoLocation
+				for j := 0; j < 20000; j++ {
+					lon, lat := geoRandomPointWithSeed(seed)
+					argvs = append(argvs, &redis.GeoLocation{Longitude: lon, Latitude: lat, Name: "place:" + strconv.Itoa(j)})
+					distance := geoDistance(lon, lat, searchLon, searchLat)
+					if distance < float64(radiusM) {
+						result = append(result, "place:"+strconv.Itoa(j))
+					}
+					debuginfo += "place:" + strconv.FormatInt(int64(j), 10) + " " + strconv.FormatInt(int64(lon), 10) + " " + strconv.FormatInt(int64(lat), 10) + " " + strconv.FormatInt(int64(distance)/1000, 10) + " km"
+				}
+				require.NoError(t, rdb.GeoAdd(ctx, "mypoints", argvs...).Err())
+				cmd := rdb.GeoRadius(ctx, "mypoints", searchLon, searchLat, &redis.GeoRadiusQuery{Radius: float64(radiusKm), Unit: "km"})
+				sort.Strings(result)
+				var res []string
+				for _, i := range cmd.Val() {
+					res = append(res, i.Name)
+				}
+				sort.Strings(res)
+				equal := reflect.DeepEqual(res, result)
+				testResult := true
+				if !equal {
+					roundingErrors := 0
+					diff := compareLists(res, result)
+					for _, i := range diff {
+						cmd := rdb.GeoPos(ctx, "mypoints", i)
+						mydist := geoDistance(cmd.Val()[0].Longitude, cmd.Val()[0].Latitude, searchLon, searchLat) / 1000
+						if mydist/float64(radiusKm) > 0.999 {
+							roundingErrors += 1
+							continue
+						}
+						if mydist < float64(radiusM) {
+							roundingErrors += 1
+							continue
+						}
+					}
+					if len(diff) == roundingErrors {
+						equal = true
+					}
+				}
+				if !equal {
+					diff := compareLists(res, result)
+					t.Log("Redis: ", res)
+					t.Log("Gotest: ", result)
+					t.Log("Diff: ", diff)
+					t.Log("debuginfo: ", debuginfo)
+					vis := make(map[string]int)
+					for _, i := range result {
+						vis[i] += 1
+					}
+					for _, i := range diff {
+						var where string
+						if _, ok := vis[i]; ok {
+							where = "(only in Go test)"
+						} else {
+							where = "(only in Kvrocks)"
+						}
+						cmd := rdb.GeoPos(ctx, "mypoints", i)
+						require.NoError(t, cmd.Err())
+						mydis := geoDistance(cmd.Val()[0].Longitude, cmd.Val()[0].Latitude, searchLon, searchLat) / 1000
+						t.Logf("%v -> %v %v %v", i, rdb.GeoPos(ctx, "mypoints", i).Val()[0], mydis, where)
+					}
+					testResult = false
+				}
+				if !testResult {
+					require.FailNow(t, "not equal")
+				}
+			}
+		})
 		testGeo(t, configs)
 	}
 }
@@ -420,125 +561,5 @@ var testGeo = func(t *testing.T, configs util.KvrocksServerConfigs) {
 		require.NoError(t, rdb.GeoAdd(ctx, "points", &redis.GeoLocation{Name: "Palermo", Longitude: 13.361389, Latitude: 38.115556}, &redis.GeoLocation{Name: "Catania", Longitude: 15.087269, Latitude: 37.502669}).Err())
 		rdb.GeoRadiusStore(ctx, "points", 13.361389, 38.115556, &redis.GeoRadiusQuery{Radius: 500, Unit: "km", Store: "points2"})
 		require.EqualValues(t, rdb.ZRange(ctx, "points", 0, -1).Val(), rdb.ZRange(ctx, "points2", 0, -1).Val())
-	})
-
-	type item struct {
-		seed int64
-		km   int64
-		lon  float64
-		lat  float64
-	}
-	regressionVectors := []item{
-		{1482225976969, 7083, 81.634948934258375, 30.561509253718668},
-		{1482340074151, 5416, -70.863281847379767, -46.347003465679947},
-		{1499014685896, 6064, -89.818768962202014, -40.463868561416803},
-		{1412, 156, 149.29737817929004, 15.95807862745508},
-		{441574, 143, 59.235461856813856, 66.269555127373678},
-		{160645, 187, -101.88575239939883, 49.061997951502917},
-		{750269, 154, -90.187939661642517, 66.615930412251487},
-		{342880, 145, 163.03472387745728, 64.012747720821181},
-		{729955, 143, 137.86663517256579, 63.986745399416776},
-		{939895, 151, 59.149620271823181, 65.204186651485145},
-		{1412, 156, 149.29737817929004, 15.95807862745508},
-		{564862, 149, 84.062063109158544, -65.685403922426232},
-		{1546032440391, 16751, -1.8175081637769495, 20.665668878082954},
-	}
-
-	t.Run("GEOADD + GEORANGE randomized test", func(t *testing.T) {
-		for attempt := 0; attempt < 30; attempt++ {
-			var debuginfo string
-			var seed int64
-			if attempt < len(regressionVectors) {
-				seed = regressionVectors[attempt].seed
-			} else {
-				seed = time.Now().UnixNano()
-			}
-			debuginfo += "rand seed is " + strconv.FormatInt(seed, 10)
-
-			require.NoError(t, rdb.Del(ctx, "mypoints").Err())
-			var radiusKm int64
-			if util.RandomIntWithSeed(10, seed) == 0 {
-				radiusKm = util.RandomIntWithSeed(50000, seed) + 10
-			} else {
-				radiusKm = util.RandomIntWithSeed(200, seed) + 10
-			}
-			if attempt < len(regressionVectors) {
-				radiusKm = regressionVectors[attempt].km
-			}
-			radiusM := radiusKm * 1000
-			searchLon, searchLat := geoRandomPointWithSeed(seed)
-			if attempt < len(regressionVectors) {
-				searchLon = regressionVectors[attempt].lon
-				searchLat = regressionVectors[attempt].lat
-			}
-			debuginfo += "Search area: " + strconv.FormatFloat(searchLon, 'f', 10, 64) + "," + strconv.FormatFloat(searchLat, 'f', 10, 64) + " " + strconv.FormatInt(radiusKm, 10) + " km"
-			var result []string
-			var argvs []*redis.GeoLocation
-			for j := 0; j < 20000; j++ {
-				lon, lat := geoRandomPointWithSeed(seed)
-				argvs = append(argvs, &redis.GeoLocation{Longitude: lon, Latitude: lat, Name: "place:" + strconv.Itoa(j)})
-				distance := geoDistance(lon, lat, searchLon, searchLat)
-				if distance < float64(radiusM) {
-					result = append(result, "place:"+strconv.Itoa(j))
-				}
-				debuginfo += "place:" + strconv.FormatInt(int64(j), 10) + " " + strconv.FormatInt(int64(lon), 10) + " " + strconv.FormatInt(int64(lat), 10) + " " + strconv.FormatInt(int64(distance)/1000, 10) + " km"
-			}
-			require.NoError(t, rdb.GeoAdd(ctx, "mypoints", argvs...).Err())
-			cmd := rdb.GeoRadius(ctx, "mypoints", searchLon, searchLat, &redis.GeoRadiusQuery{Radius: float64(radiusKm), Unit: "km"})
-			sort.Strings(result)
-			var res []string
-			for _, i := range cmd.Val() {
-				res = append(res, i.Name)
-			}
-			sort.Strings(res)
-			equal := reflect.DeepEqual(res, result)
-			testResult := true
-			if !equal {
-				roundingErrors := 0
-				diff := compareLists(res, result)
-				for _, i := range diff {
-					cmd := rdb.GeoPos(ctx, "mypoints", i)
-					mydist := geoDistance(cmd.Val()[0].Longitude, cmd.Val()[0].Latitude, searchLon, searchLat) / 1000
-					if mydist/float64(radiusKm) > 0.999 {
-						roundingErrors += 1
-						continue
-					}
-					if mydist < float64(radiusM) {
-						roundingErrors += 1
-						continue
-					}
-				}
-				if len(diff) == roundingErrors {
-					equal = true
-				}
-			}
-			if !equal {
-				diff := compareLists(res, result)
-				t.Log("Redis: ", res)
-				t.Log("Gotest: ", result)
-				t.Log("Diff: ", diff)
-				t.Log("debuginfo: ", debuginfo)
-				vis := make(map[string]int)
-				for _, i := range result {
-					vis[i] += 1
-				}
-				for _, i := range diff {
-					var where string
-					if _, ok := vis[i]; ok {
-						where = "(only in Go test)"
-					} else {
-						where = "(only in Kvrocks)"
-					}
-					cmd := rdb.GeoPos(ctx, "mypoints", i)
-					require.NoError(t, cmd.Err())
-					mydis := geoDistance(cmd.Val()[0].Longitude, cmd.Val()[0].Latitude, searchLon, searchLat) / 1000
-					t.Logf("%v -> %v %v %v", i, rdb.GeoPos(ctx, "mypoints", i).Val()[0], mydis, where)
-				}
-				testResult = false
-			}
-			if !testResult {
-				require.FailNow(t, "not equal")
-			}
-		}
 	})
 }
