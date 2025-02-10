@@ -221,7 +221,7 @@ class CommandSubStr : public CommandGetRange {
 class CommandSetRange : public Commander {
  public:
   Status Parse(const std::vector<std::string> &args) override {
-    auto parse_result = ParseInt<int>(args[2], {0, INT64_MAX}, 10);
+    auto parse_result = ParseInt<int>(args[2], {0, INT32_MAX}, 10);
     if (!parse_result) {
       return {Status::RedisParseErr, errValueNotInteger};
     }
