@@ -249,6 +249,7 @@ struct Config {
   void ClearMaster();
   bool IsSlave() const { return !master_host.empty(); }
   bool HasConfigFile() const { return !path_.empty(); }
+  std::string ConfigFilePath() const { return path_; }
 
  private:
   std::string path_;
