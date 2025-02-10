@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include <execinfo.h>
 #include <glog/logging.h>
 #include <signal.h>
 

@@ -29,7 +29,7 @@ import (
 )
 
 func TestHello(t *testing.T) {
-	srv := util.StartServer(t, map[string]string{})
+	srv := util.StartServer(t, map[string]string{"resp3-enabled": "no"})
 	defer srv.Close()
 
 	ctx := context.Background()

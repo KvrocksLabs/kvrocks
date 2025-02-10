@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check typos
-        uses: crate-ci/typos@v1.29.4
+        uses: crate-ci/typos@v1.29.5
         with:
           config: .github/config/typos.toml
 
@@ -390,7 +390,10 @@ jobs:
     name: Check Docker image
     needs: [precondition, check-and-lint, check-typos]
     if: ${{ needs.precondition.outputs.docs_only != 'true' }}
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v4
       - name: Get core numbers
@@ -440,6 +443,10 @@ jobs:
           - name: Debian 12
             image: debian:12
             compiler: gcc
+          - name: Alpine 3
+            image: alpine:3
+            compiler: gcc
+            disable_jemalloc: -DDISABLE_JEMALLOC=ON
 
     runs-on: ubuntu-22.04
     container:
@@ -495,6 +502,13 @@ jobs:
           apt install -y bash build-essential cmake curl git libssl-dev libtool python3 python3-pip wget
           echo "NPROC=$(nproc)" >> $GITHUB_ENV
 
+      - name: Setup Alpine
+        if: ${{ startsWith(matrix.image, 'alpine') }}
+        run: |
+          apk update
+          apk add bash cmake curl git python3 wget make gcc g++ autoconf linux-headers py3-pip py3-redis
+          echo "NPROC=$(nproc)" >> $GITHUB_ENV
+
       - name: Cache redis
         id: cache-redis
         uses: actions/cache@v4
@@ -530,7 +544,7 @@ jobs:
 
       - name: Build Kvrocks
         run: |
-          ./x.py build -j$NPROC --unittest --compiler ${{ matrix.compiler }}
+          ./x.py build -j$NPROC --unittest --compiler ${{ matrix.compiler }} ${{ matrix.disable_jemalloc }}
 
       - name: Run Unit Test
         run: |
@@ -543,7 +557,7 @@ jobs:
           ./x.py test go build $GOCASE_RUN_ARGS
 
       - name: Install redis-py for openSUSE and Rocky
-        if: ${{ !startsWith(matrix.image, 'archlinux') && !startsWith(matrix.image, 'debian') }}
+        if: ${{ !startsWith(matrix.image, 'archlinux') && !startsWith(matrix.image, 'debian') && !startsWith(matrix.image, 'alpine') }}
         run: pip3 install redis==4.3.6
 
       - name: Install redis-py for Debian

@@ -258,6 +258,36 @@ class CommandHMSet : public Commander {
   std::vector<FieldValue> field_values_;
 };
 
+class CommandHSetExpire : public Commander {
+ public:
+  Status Parse(const std::vector<std::string> &args) override {
+    ttl_ = GET_OR_RET(ParseInt<uint64_t>(args[2], 10));
+    if ((args.size() - 3) % 2 != 0) {
+      return {Status::RedisParseErr, "Invalid number of arguments: field-value pairs must be complete"};
+    }
+    for (size_t i = 3; i < args_.size(); i += 2) {
+      field_values_.emplace_back(args_[i], args_[i + 1]);
+    }
+    return Commander::Parse(args);
+  }
+
+  Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
+    uint64_t ret = 0;
+    redis::Hash hash_db(srv->storage, conn->GetNamespace());
+
+    auto s = hash_db.MSet(ctx, args_[1], field_values_, false, &ret, ttl_ * 1000 + util::GetTimeStampMS());
+    if (!s.ok()) {
+      return {Status::RedisExecErr, s.ToString()};
+    }
+    *output = redis::RESP_OK;
+    return Status::OK();
+  }
+
+ private:
+  std::vector<FieldValue> field_values_;
+  uint64_t ttl_ = 0;
+};
+
 class CommandHKeys : public Commander {
  public:
   Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
@@ -680,6 +710,7 @@ REDIS_REGISTER_COMMANDS(Hash, MakeCmdAttr<CommandHGet>("hget", 3, "read-only", 1
                         MakeCmdAttr<CommandHIncrBy>("hincrby", 4, "write", 1, 1, 1),
                         MakeCmdAttr<CommandHIncrByFloat>("hincrbyfloat", 4, "write", 1, 1, 1),
                         MakeCmdAttr<CommandHMSet>("hset", -4, "write", 1, 1, 1),
+                        MakeCmdAttr<CommandHSetExpire>("hsetexpire", -5, "write", 1, 1, 1),
                         MakeCmdAttr<CommandHSetNX>("hsetnx", -4, "write", 1, 1, 1),
                         MakeCmdAttr<CommandHDel>("hdel", -3, "write no-dbsize-check", 1, 1, 1),
                         MakeCmdAttr<CommandHStrlen>("hstrlen", 3, "read-only", 1, 1, 1),

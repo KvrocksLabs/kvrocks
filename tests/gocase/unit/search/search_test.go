@@ -64,9 +64,9 @@ func TestSearch(t *testing.T) {
 			require.Equal(t, "index_definition", idxInfo[2])
 			require.Equal(t, []interface{}{"key_type", "ReJSON-RL", "prefixes", []interface{}{"test1:"}}, idxInfo[3])
 			require.Equal(t, "fields", idxInfo[4])
-			require.Equal(t, []interface{}{"identifier", "a", "type", "tag", "properties", []interface{}{"separator", ",", "case_sensitive", int64(0)}}, idxInfo[5].([]interface{})[0])
+			require.Equal(t, []interface{}{"identifier", "a", "type", "tag", "properties", []interface{}{"separator", ",", "case_sensitive", false}}, idxInfo[5].([]interface{})[0])
 			require.Equal(t, []interface{}{"identifier", "b", "type", "numeric", "properties", []interface{}{}}, idxInfo[5].([]interface{})[1])
-			require.Equal(t, []interface{}{"identifier", "c", "type", "vector", "properties", []interface{}{"algorithm", "HNSW", "vector_type", "FLOAT64", "dim", int64(3), "distance_metric", "L2", "m", int64(16), "ef_construction", int64(200), "ef_runtime", int64(10), "epsilon", "0.01"}}, idxInfo[5].([]interface{})[2])
+			require.Equal(t, []interface{}{"identifier", "c", "type", "vector", "properties", []interface{}{"algorithm", "HNSW", "vector_type", "FLOAT64", "dim", int64(3), "distance_metric", "L2", "m", int64(16), "ef_construction", int64(200), "ef_runtime", int64(10), "epsilon", 0.01}}, idxInfo[5].([]interface{})[2])
 		}
 		verify(t)
 

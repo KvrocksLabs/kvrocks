@@ -21,6 +21,7 @@
 #pragma once
 
 #include <rocksdb/status.h>
+#include <sys/time.h>
 
 #include <atomic>
 #include <bitset>

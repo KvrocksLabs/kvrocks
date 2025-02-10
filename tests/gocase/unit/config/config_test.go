@@ -37,6 +37,7 @@ import (
 
 func TestRenameCommand(t *testing.T) {
 	srv := util.StartServer(t, map[string]string{
+		"resp3-enabled":       "no",
 		"rename-command KEYS": "KEYSNEW",
 		"rename-command GET":  "GETNEW",
 		"rename-command SET":  "SETNEW",
@@ -71,10 +72,8 @@ func TestSetConfigBackupDir(t *testing.T) {
 
 	originBackupDir := filepath.Join(configs["dir"], "backup")
 
-	r := rdb.Do(ctx, "CONFIG", "GET", "backup-dir")
-	rList := r.Val().([]interface{})
-	require.EqualValues(t, rList[0], "backup-dir")
-	require.EqualValues(t, rList[1], originBackupDir)
+	r := rdb.ConfigGet(ctx, "backup-dir").Val()
+	require.EqualValues(t, r["backup-dir"], originBackupDir)
 
 	hasCompactionFiles := func(dir string) bool {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -98,14 +97,11 @@ func TestSetConfigBackupDir(t *testing.T) {
 
 	require.False(t, hasCompactionFiles(newBackupDir))
 
-	require.NoError(t, rdb.Do(ctx, "CONFIG", "SET", "backup-dir", newBackupDir).Err())
+	require.NoError(t, rdb.ConfigSet(ctx, "backup-dir", newBackupDir).Err())
+	r = rdb.ConfigGet(ctx, "backup-dir").Val()
+	require.EqualValues(t, r["backup-dir"], newBackupDir)
 
-	r = rdb.Do(ctx, "CONFIG", "GET", "backup-dir")
-	rList = r.Val().([]interface{})
-	require.EqualValues(t, rList[0], "backup-dir")
-	require.EqualValues(t, rList[1], newBackupDir)
-
-	require.NoError(t, rdb.Do(ctx, "bgsave").Err())
+	require.NoError(t, rdb.BgSave(ctx).Err())
 	time.Sleep(2000 * time.Millisecond)
 
 	require.True(t, hasCompactionFiles(newBackupDir))

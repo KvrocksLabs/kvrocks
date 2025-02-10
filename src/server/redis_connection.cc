@@ -385,10 +385,17 @@ void Connection::ExecuteCommands(std::deque<CommandTokens> *to_process_cmds) {
 
     auto cmd_s = Server::LookupAndCreateCommand(cmd_tokens.front());
     if (!cmd_s.IsOK()) {
+      auto cmd_name = cmd_tokens.front();
+      if (util::EqualICase(cmd_name, "host:") || util::EqualICase(cmd_name, "post")) {
+        LOG(WARNING) << "A likely HTTP request is detected in the RESP connection, indicating a potential "
+                        "Cross-Protocol Scripting attack. Connection aborted.";
+        EnableFlag(kCloseAsync);
+        return;
+      }
       if (is_multi_exec) multi_error_ = true;
       Reply(redis::Error(
           {Status::NotOK,
-           fmt::format("unknown command `{}`, with args beginning with: {}", cmd_tokens.front(),
+           fmt::format("unknown command `{}`, with args beginning with: {}", cmd_name,
                        util::StringJoin(nonstd::span(cmd_tokens.begin() + 1, cmd_tokens.end()),
                                         [](const auto &v) -> decltype(auto) { return fmt::format("`{}`", v); }))}));
       continue;

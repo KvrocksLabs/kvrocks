@@ -274,11 +274,8 @@ Status SockSendFile(int out_fd, int in_fd, size_t size) { return SockSendFileImp
 Status SockSendFile(int out_fd, int in_fd, size_t size, [[maybe_unused]] ssl_st *ssl) {
 #ifdef ENABLE_OPENSSL
   if (ssl) {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-    return SockSendFileImpl<SSL_sendfile>(ssl, in_fd, size, 0);
-#else
+    // NOTE: SockSendFileImpl<SSL_sendfile> will cause errors, refer to #2756
     return SockSendFileImpl<SendFileSSLImpl>(ssl, in_fd, size);
-#endif
   }
 #endif
   return SockSendFile(out_fd, in_fd, size);

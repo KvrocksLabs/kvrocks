@@ -240,10 +240,10 @@ class CommandFetchMeta : public Commander {
         return;
       }
       // Send full data file info
-      if (util::SockSend(repl_fd, files + CRLF, bev).IsOK()) {
+      if (auto s = util::SockSend(repl_fd, files + CRLF, bev)) {
         LOG(INFO) << "[replication] Succeed sending full data file info to " << ip;
       } else {
-        LOG(WARNING) << "[replication] Fail to send full data file info " << ip << ", error: " << strerror(errno);
+        LOG(WARNING) << "[replication] Fail to send full data file info " << ip << ", error: " << s.Msg();
       }
       auto now_secs = static_cast<time_t>(util::GetTimeStamp());
       srv->storage->SetCheckpointAccessTimeSecs(now_secs);
@@ -295,11 +295,14 @@ class CommandFetchFile : public Commander {
         if (!fd) break;
 
         // Send file size and content
-        if (util::SockSend(repl_fd, std::to_string(file_size) + CRLF, bev).IsOK() &&
-            util::SockSendFile(repl_fd, *fd, file_size, bev).IsOK()) {
+        auto s = util::SockSend(repl_fd, std::to_string(file_size) + CRLF, bev);
+        if (s) {
+          s = util::SockSendFile(repl_fd, *fd, file_size, bev);
+        }
+        if (s) {
           LOG(INFO) << "[replication] Succeed sending file " << file << " to " << ip;
         } else {
-          LOG(WARNING) << "[replication] Fail to send file " << file << " to " << ip << ", error: " << strerror(errno);
+          LOG(WARNING) << "[replication] Fail to send file " << file << " to " << ip << ", error: " << s.Msg();
           break;
         }
         fd.Close();

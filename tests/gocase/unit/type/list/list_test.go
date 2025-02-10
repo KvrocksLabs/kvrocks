@@ -1462,15 +1462,16 @@ func testList(t *testing.T, configs util.KvrocksServerConfigs) {
 			// https://github.com/apache/kvrocks/issues/2617
 			// WriteArgs are required to be executed first
 			time.Sleep(100 * time.Millisecond)
-			require.NoError(t, rdb.RPush(ctx, key2, "one", "two").Err())
+
 			require.NoError(t, rdb.RPush(ctx, key1, "ONE", "TWO").Err())
+			require.NoError(t, rdb.RPush(ctx, key2, "one", "two").Err())
 			if direction == "LEFT" {
-				rd.MustReadStringsWithKey(t, key2, []string{"one", "two"})
+				rd.MustReadStringsWithKey(t, key1, []string{"ONE", "TWO"})
 			} else {
-				rd.MustReadStringsWithKey(t, key2, []string{"two", "one"})
+				rd.MustReadStringsWithKey(t, key1, []string{"TWO", "ONE"})
 			}
-			require.EqualValues(t, 0, rdb.Exists(ctx, key2).Val())
-			require.EqualValues(t, 2, rdb.LLen(ctx, key1).Val())
+			require.EqualValues(t, 0, rdb.Exists(ctx, key1).Val())
+			require.EqualValues(t, 2, rdb.LLen(ctx, key2).Val())
 		})
 
 		t.Run(fmt.Sprintf("BLMPOP test blocked served secondKey noCount %s", direction), func(t *testing.T) {

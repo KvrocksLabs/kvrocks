@@ -277,7 +277,7 @@ rocksdb::Status Hash::Delete(engine::Context &ctx, const Slice &user_key, const 
 }
 
 rocksdb::Status Hash::MSet(engine::Context &ctx, const Slice &user_key, const std::vector<FieldValue> &field_values,
-                           bool nx, uint64_t *added_cnt) {
+                           bool nx, uint64_t *added_cnt, uint64_t expire) {
   *added_cnt = 0;
   std::string ns_key = AppendNamespacePrefix(user_key);
 
@@ -289,6 +289,12 @@ rocksdb::Status Hash::MSet(engine::Context &ctx, const Slice &user_key, const st
   // on new hash object when hash_field_expiration option is yes.
   if (s.IsNotFound() && storage_->GetConfig()->hash_field_expiration) {
     metadata.field_encoding = HashSubkeyEncoding::VALUE_WITH_TTL;
+  }
+
+  bool ttl_updated = false;
+  if (expire > 0 && metadata.expire != expire) {
+    metadata.expire = expire;
+    ttl_updated = true;
   }
 
   int added = 0;
@@ -332,7 +338,7 @@ rocksdb::Status Hash::MSet(engine::Context &ctx, const Slice &user_key, const st
     if (!s.ok()) return s;
   }
 
-  if (added > 0) {
+  if (added > 0 || ttl_updated) {
     *added_cnt = added;
     metadata.size += added;
     std::string bytes;

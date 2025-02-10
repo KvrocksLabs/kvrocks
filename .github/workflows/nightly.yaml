@@ -20,19 +20,40 @@ name: Nightly
 on:
   push:
     branches: [unstable]
+    tags: ['v2.**']
   pull_request:
     paths: ['.github/workflows/nightly.yaml']
 
 jobs:
-  publish-nightly-docker-image:
-    name: Publish nightly Docker image
-    runs-on: ubuntu-20.04
-    if: github.repository_owner == 'apache'
+  build:
+    name: "Build nightly docker images"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            os: ubuntu-24.04
+          - platform: linux/arm64
+            os: ubuntu-24.04-arm
     steps:
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
-      - name: Login Docker Hub
-        if: (github.event_name != 'pull_request')
+        with:
+          fetch-depth: 0
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: apache/kvrocks
+
+      - name: Login to Docker Hub
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -42,17 +63,59 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Available platforms
-        run: echo ${{ steps.buildx.outputs.platforms }}
-      
-      - name: Get core numbers
-        run: echo "NPROC=$(nproc)" >> $GITHUB_ENV
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,"name=apache/kvrocks",push-by-digest=true,name-canonical=true
 
-      - name: Docker meta
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge and push nightly docker images
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    needs:
+      - build
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta (for unstable)
         id: meta
+        if: ${{ github.ref_name == 'unstable' }}
         uses: docker/metadata-action@v5
         with:
           images: apache/kvrocks
@@ -61,12 +124,28 @@ jobs:
             type=sha,prefix=nightly-{{date 'YYYYMMDD'}}-,format=short
             type=raw,value=nightly
 
-      - uses: docker/build-push-action@v6
+      - name: Docker meta (for tags)
+        id: meta_tag
+        if: ${{ github.ref_name != 'unstable' }}
+        uses: docker/metadata-action@v5
         with:
-          context: .
-          platforms: linux/amd64, linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            MORE_BUILD_ARGS=-j${{ env.NPROC }}
+          images: apache/kvrocks
+          flavor: latest=false
+          tags: |
+            type=sha,prefix=nightly-{{date 'YYYYMMDD'}}-{{tag}}-,format=short
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'apache/kvrocks@sha256:%s ' *)
+
+      - name: Inspect image (for unstable)
+        if: ${{ github.ref_name == 'unstable' }}
+        run: |
+          docker buildx imagetools inspect apache/kvrocks:${{ steps.meta.outputs.version }}
+
+      - name: Inspect image (for tags)
+        if: ${{ github.ref_name != 'unstable' }}
+        run: |
+          docker buildx imagetools inspect apache/kvrocks:${{ steps.meta_tag.outputs.version }}

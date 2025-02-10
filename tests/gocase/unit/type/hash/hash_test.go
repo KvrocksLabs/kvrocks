@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/apache/kvrocks/tests/gocase/util"
@@ -127,6 +128,136 @@ var testHash = func(t *testing.T, configs map[string]string) {
 		require.Equal(t, int64(2), rdb.HSet(ctx, "hmsetmulti", "key1", "val1", "key2", "val2").Val())
 		require.Equal(t, int64(0), rdb.HSet(ctx, "hmsetmulti", "key1", "val1", "key2", "val2").Val())
 		require.Equal(t, int64(1), rdb.HSet(ctx, "hmsetmulti", "key1", "val1", "key3", "val3").Val())
+	})
+
+	t.Run("HSETEXPIRE wrong number of args", func(t *testing.T) {
+		pattern := ".*wrong number.*"
+		ttlStr := "3600"
+		testKey := "hsetKey"
+		r := rdb.Do(ctx, "hsetexpire", testKey, ttlStr)
+		util.ErrorRegexp(t, r.Err(), pattern)
+	})
+
+	t.Run("HSETEXPIRE incomplete pairs", func(t *testing.T) {
+		pattern := ".*field-value pairs must be complete.*"
+		ttlStr := "3600"
+		testKey := "hsetKey"
+		r := rdb.Do(ctx, "hsetexpire", testKey, ttlStr, "key1", "val1", "key2")
+		util.ErrorRegexp(t, r.Err(), pattern)
+	})
+
+	t.Run("HSET/HSETEXPIRE/HSETEXPIRE/persist update expire time", func(t *testing.T) {
+		ttlStr := "3600"
+		testKey := "hsetKeyUpdateTime"
+		// create an hash without expiration
+		r := rdb.Do(ctx, "hset", testKey, "key1", "val1", "key2", "val2")
+		require.NoError(t, r.Err())
+		noExp := rdb.ExpireTime(ctx, testKey)
+		// make sure there is not exp set on the key
+		assert.Equal(t, -1*time.Nanosecond, noExp.Val())
+		// validate we inserted the key/vals
+		values := rdb.HGetAll(ctx, testKey)
+		assert.Equal(t, 2, len(values.Val()))
+
+		// update the hash and add expiration
+		r = rdb.Do(ctx, "hsetexpire", testKey, ttlStr, "key3", "val3")
+		require.NoError(t, r.Err())
+		assert.Equal(t, "OK", r.Val())
+		firstExp := rdb.ExpireTime(ctx, testKey)
+		firstExpireTime := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Add(firstExp.Val()).Unix()
+		// validate there is exp set on the key
+		assert.NotEqual(t, -1, firstExpireTime)
+		assert.Greater(t, firstExpireTime, time.Now().Unix())
+		// validate we updated the key/vals
+		values = rdb.HGetAll(ctx, testKey)
+		assert.Equal(t, 3, len(values.Val()))
+
+		// update the has and expiration
+		time.Sleep(1 * time.Second)
+		r = rdb.Do(ctx, "hsetexpire", testKey, ttlStr, "key4", "val4")
+		require.NoError(t, r.Err())
+		assert.Equal(t, "OK", r.Val())
+		// validate there is exp set on the key and it is new
+		secondExp := rdb.ExpireTime(ctx, testKey)
+		secondExpireTime := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Add(secondExp.Val()).Unix()
+		assert.NotEqual(t, -1, secondExpireTime)
+		assert.Greater(t, secondExpireTime, time.Now().Unix())
+		assert.Greater(t, secondExpireTime, firstExpireTime)
+		// validate we updated the key/vals
+		values = rdb.HGetAll(ctx, testKey)
+		assert.Equal(t, 4, len(values.Val()))
+
+		//remove expiration on the key and verify
+		r = rdb.Do(ctx, "persist", testKey)
+		require.NoError(t, r.Err())
+		persist := rdb.ExpireTime(ctx, testKey)
+		assert.Equal(t, -1*time.Nanosecond, persist.Val())
+		// validate we still have the correct number of key/vals
+		values = rdb.HGetAll(ctx, testKey)
+		assert.Equal(t, 4, len(values.Val()))
+	})
+
+	t.Run("HSETEXPIRE/HLEN/EXPIRETIME - Small hash creation", func(t *testing.T) {
+		ttlStr := "3600"
+		testKey := "hsetexsmallhash"
+		hsetExSmallHash := make(map[string]string)
+		for i := 0; i < 8; i++ {
+			key := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			val := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			if _, ok := hsetExSmallHash[key]; ok {
+				i--
+			}
+			rdb.Do(ctx, "hsetexpire", testKey, ttlStr, key, val)
+			hsetExSmallHash[key] = val
+		}
+		require.Equal(t, int64(8), rdb.HLen(ctx, testKey).Val())
+		val := rdb.ExpireTime(ctx, testKey).Val()
+		expireTime := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Add(val).Unix()
+		require.Greater(t, expireTime, time.Now().Unix())
+	})
+
+	t.Run("HSETEXPIRE/HLEN/EXPIRETIME - Big hash creation", func(t *testing.T) {
+		ttlStr := "3600"
+		testKey := "hsetexbighash"
+		hsetExBigHash := make(map[string]string)
+		for i := 0; i < 1024; i++ {
+			key := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			val := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			if _, ok := hsetExBigHash[key]; ok {
+				i--
+			}
+			rdb.Do(ctx, "hsetexpire", testKey, ttlStr, key, val)
+			hsetExBigHash[key] = val
+		}
+		require.Equal(t, int64(1024), rdb.HLen(ctx, testKey).Val())
+		val := rdb.ExpireTime(ctx, testKey).Val()
+		expireTime := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Add(val).Unix()
+		require.Greater(t, expireTime, time.Now().Unix())
+	})
+
+	t.Run("HSETEXPIRE/HLEN/EXPIRETIME - Multi field-value pairs creation", func(t *testing.T) {
+		ttlStr := "3600"
+		testKey := "hsetexbighashPair"
+		hsetExBigHash := make(map[string]string)
+		cmd := []string{"hsetexpire", testKey, ttlStr}
+		for i := 0; i < 10; i++ {
+			key := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			val := "__avoid_collisions__" + util.RandString(0, 8, util.Alpha)
+			if _, ok := hsetExBigHash[key]; ok {
+				i--
+			}
+			cmd = append(cmd, key, val)
+			hsetExBigHash[key] = val
+		}
+		args := make([]interface{}, len(cmd))
+		for i, v := range cmd {
+			args[i] = v
+		}
+		rdb.Do(ctx, args...)
+		require.Equal(t, int64(10), rdb.HLen(ctx, testKey).Val())
+		val := rdb.ExpireTime(ctx, testKey).Val()
+		expireTime := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Add(val).Unix()
+		require.Greater(t, expireTime, time.Now().Unix())
 	})
 
 	t.Run("HGET against the small hash", func(t *testing.T) {

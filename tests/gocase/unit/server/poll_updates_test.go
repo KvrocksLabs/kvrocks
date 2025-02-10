@@ -72,21 +72,21 @@ func parseRESPCommands(t *testing.T, values []any) []any {
 	return updates
 }
 
-func parsePollUpdatesResult(t *testing.T, slice []any, isRESP bool) *PollUpdatesResult {
-	itemCount := 6
-	require.Len(t, slice, itemCount)
+func parsePollUpdatesResult(t *testing.T, m map[any]any, isRESP bool) *PollUpdatesResult {
+	itemCount := 3
+	require.Len(t, m, itemCount)
 	var latestSeq, nextSeq int64
 
 	updates := make([]any, 0)
-	for i := 0; i < itemCount; i += 2 {
-		key := slice[i].(string)
+	for k, v := range m {
+		key := k.(string)
 		switch key {
 		case "latest_sequence":
-			latestSeq = slice[i+1].(int64)
+			latestSeq = v.(int64)
 		case "next_sequence":
-			nextSeq = slice[i+1].(int64)
+			nextSeq = v.(int64)
 		case "updates":
-			fields := slice[i+1].([]interface{})
+			fields := v.([]interface{})
 			if isRESP {
 				updates = parseRESPCommands(t, fields)
 			} else {
@@ -127,17 +127,18 @@ func TestPollUpdates_Basic(t *testing.T) {
 		}
 
 		updates := make([]any, 0)
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 6).Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 6).Result()
 		require.NoError(t, err)
-		pollUpdates := parsePollUpdatesResult(t, slice, false)
+		pollUpdates := parsePollUpdatesResult(t, result.(map[interface{}]interface{}), false)
 		require.EqualValues(t, 10, pollUpdates.LatestSeq)
 		require.EqualValues(t, 6, pollUpdates.NextSeq)
 		require.Len(t, pollUpdates.Updates, 6)
 		updates = append(updates, pollUpdates.Updates...)
 
-		slice, err = rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 6).Slice()
+		result, err = rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 6).Result()
 		require.NoError(t, err)
-		pollUpdates = parsePollUpdatesResult(t, slice, false)
+
+		pollUpdates = parsePollUpdatesResult(t, result.(map[interface{}]interface{}), false)
 		require.EqualValues(t, 10, pollUpdates.LatestSeq)
 		require.EqualValues(t, 10, pollUpdates.NextSeq)
 		require.Len(t, pollUpdates.Updates, 4)
@@ -179,10 +180,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 		require.NoError(t, rdb0.Set(ctx, "k0", "v0", 0).Err())
 		require.NoError(t, rdb0.Set(ctx, "k1", "v1", 0).Err())
 		require.NoError(t, rdb0.Del(ctx, "k1").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.EqualValues(t, 3, pollUpdates.LatestSeq)
 		require.EqualValues(t, 3, pollUpdates.NextSeq)
 		require.Len(t, pollUpdates.Updates, 1)
@@ -199,10 +200,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 	t.Run("Hash type", func(t *testing.T) {
 		require.NoError(t, rdb0.HSet(ctx, "h0", "f0", "v0", "f1", "v1").Err())
 		require.NoError(t, rdb0.HDel(ctx, "h0", "f1").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Namespace: "default",
@@ -217,10 +218,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 	t.Run("List type", func(t *testing.T) {
 		require.NoError(t, rdb0.LPush(ctx, "l0", "v0", "v1").Err())
 		require.NoError(t, rdb0.LSet(ctx, "l0", 1, "v2").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Namespace: "default",
@@ -235,10 +236,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 	t.Run("Set type", func(t *testing.T) {
 		require.NoError(t, rdb0.SAdd(ctx, "s0", "v0", "v1").Err())
 		require.NoError(t, rdb0.SRem(ctx, "s0", "v1").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Namespace: "default",
@@ -254,10 +255,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 		require.NoError(t, rdb0.ZAdd(ctx, "z0", redis.Z{Member: "v0", Score: 1.2}).Err())
 		require.NoError(t, rdb0.ZAdd(ctx, "z0", redis.Z{Member: "v1", Score: 1.2}).Err())
 		require.NoError(t, rdb0.ZRem(ctx, "z0", "v1").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Namespace: "default",
@@ -276,10 +277,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 		}).Result()
 		require.NoError(t, err)
 		require.NoError(t, rdb0.XDel(ctx, "stream", id).Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Commands: [][]string{
@@ -292,10 +293,10 @@ func TestPollUpdates_WithRESPFormat(t *testing.T) {
 	t.Run("JSON type", func(t *testing.T) {
 		require.NoError(t, rdb0.JSONSet(ctx, "json", "$", `{"field": "value"}`).Err())
 		require.NoError(t, rdb0.JSONDel(ctx, "json", "$.field").Err())
-		slice, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Slice()
+		result, err := rdb0.Do(ctx, "POLLUPDATES", pollUpdates.NextSeq, "MAX", 10, "FORMAT", "RESP").Result()
 		require.NoError(t, err)
 
-		pollUpdates = parsePollUpdatesResult(t, slice, true)
+		pollUpdates = parsePollUpdatesResult(t, result.(map[any]any), true)
 		require.Len(t, pollUpdates.Updates, 1)
 		require.EqualValues(t, []any{RESPFormat{
 			Namespace: "default",
@@ -332,9 +333,9 @@ func TestPollUpdates_WithStrict(t *testing.T) {
 	// Works well if the sequence number is mismatched but not in strict mode
 	require.NoError(t, rdb0.Do(ctx, "POLLUPDATES", 1, "MAX", 1).Err())
 
-	slice, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 10, "STRICT").Slice()
+	result, err := rdb0.Do(ctx, "POLLUPDATES", 0, "MAX", 10, "STRICT").Result()
 	require.NoError(t, err)
-	pollUpdates := parsePollUpdatesResult(t, slice, false)
+	pollUpdates := parsePollUpdatesResult(t, result.(map[any]any), false)
 	require.EqualValues(t, 3, pollUpdates.LatestSeq)
 	require.EqualValues(t, 3, pollUpdates.NextSeq)
 	require.Len(t, pollUpdates.Updates, 2)
