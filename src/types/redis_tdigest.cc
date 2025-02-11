@@ -46,7 +46,7 @@
 
 namespace redis {
 
-// It should be replaced by a iteration of the rocksdb iterator
+// TODO: It should be replaced by a iteration of the rocksdb iterator
 class DummyCentroids {
  public:
   DummyCentroids(const TDigestMetadata& meta_data, const std::vector<Centroid>& centroids)
@@ -68,6 +68,9 @@ class DummyCentroids {
       }
       return iter_ != centroids_.cend();
     }
+
+    // The Prev function can only be called for item is not cend,
+    // because we must gurantee the iterator to be inside the valid range before iteration.
     bool Prev() {
       if (Valid() && iter_ != centroids_.cbegin()) {
         std::advance(iter_, -1);
@@ -306,13 +309,25 @@ rocksdb::Status TDigest::decodeCentroidFromKeyValue(const rocksdb::Slice& key, c
   InternalKey ikey(key, storage_->IsSlotIdEncoded());
   auto subkey = ikey.GetSubKey();
   auto type_flg = static_cast<uint8_t>(SegmentType::kGuardFlag);
-  GetFixed8(&subkey, &type_flg);
-  if (static_cast<SegmentType>(type_flg) != SegmentType::kCentroids) {
-    return rocksdb::Status::Corruption(fmt::format("corrupted tdigest centroid key type: {}", type_flg));
+  if (!GetFixed8(&subkey, &type_flg)) {
+    LOG(ERROR) << "corrupted tdigest centroid key, extract type failed";
+    return rocksdb::Status::Corruption("corrupted tdigest centroid key");
   }
-  GetDouble(&subkey, &centroid->mean);
-  rocksdb::Slice value_slice = value;  // GetDouble needs a mutable pointer of slice
-  GetDouble(&value_slice, &centroid->weight);
+  if (static_cast<SegmentType>(type_flg) != SegmentType::kCentroids) {
+    LOG(ERROR) << "corrupted tdigest centroid key type: " << type_flg << ", expect to be "
+               << static_cast<uint8_t>(SegmentType::kCentroids);
+    return rocksdb::Status::Corruption("corrupted tdigest centroid key type");
+  }
+  if (!GetDouble(&subkey, &centroid->mean)) {
+    LOG(ERROR) << "corrupted tdigest centroid key, extract mean failed";
+    return rocksdb::Status::Corruption("corrupted tdigest centroid key");
+  }
+
+  if (rocksdb::Slice value_slice = value;  // GetDouble needs a mutable pointer of slice
+      !GetDouble(&value_slice, &centroid->weight)) {
+    LOG(ERROR) << "corrupted tdigest centroid value, extract weight failed";
+    return rocksdb::Status::Corruption("corrupted tdigest centroid value");
+  }
   return rocksdb::Status::OK();
 }
 

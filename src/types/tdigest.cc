@@ -35,16 +35,6 @@ refer to https://github.com/apache/arrow/blob/27bbd593625122a4a25d9471c8aaf5df54
 #include "common/status.h"
 
 namespace {
-// scale function K0: linear function, as baseline
-struct ScalerK0 {
-  explicit ScalerK0(uint32_t delta) : delta_norm(delta / 2.0) {}
-
-  double K(double q) const { return delta_norm * q; }
-  double Q(double k) const { return k / delta_norm; }
-
-  const double delta_norm;
-};
-
 // scale function K1
 struct ScalerK1 {
   explicit ScalerK1(uint32_t delta) : delta_norm(delta / (2.0 * M_PI)) {}
