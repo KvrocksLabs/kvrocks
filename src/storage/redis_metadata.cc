@@ -328,7 +328,9 @@ bool Metadata::ExpireAt(uint64_t expired_ts) const {
   return expire < expired_ts;
 }
 
-bool Metadata::IsSingleKVType() const { return Type() == kRedisString || Type() == kRedisJson; }
+bool Metadata::IsSingleKVType() const {
+  return Type() == kRedisString || Type() == kRedisJson || Type() == kRedisCountMinSketch;
+}
 
 bool Metadata::IsEmptyableType() const {
   return IsSingleKVType() || Type() == kRedisStream || Type() == kRedisBloomFilter || Type() == kRedisHyperLogLog;
@@ -494,6 +496,44 @@ rocksdb::Status HyperLogLogMetadata::Decode(Slice *input) {
     return rocksdb::Status::InvalidArgument(fmt::format("Invalid encode type {}", encoded_type));
   }
   this->encode_type = static_cast<EncodeType>(encoded_type);
+
+  return rocksdb::Status::OK();
+}
+
+void CountMinSketchMetadata::Encode(std::string *dst) const {
+  Metadata::Encode(dst);
+  PutFixed32(dst, width);
+  PutFixed32(dst, depth);
+  PutFixed64(dst, counter);
+  for (const auto &count : array) {
+    PutFixed32(dst, count);
+  }
+}
+
+rocksdb::Status CountMinSketchMetadata::Decode(Slice *input) {
+  if (auto s = Metadata::Decode(input); !s.ok()) {
+    return s;
+  }
+  if (!GetFixed32(input, &width)) {
+    return rocksdb::Status::InvalidArgument(kErrMetadataTooShort);
+  }
+  if (!GetFixed32(input, &depth)) {
+    return rocksdb::Status::InvalidArgument(kErrMetadataTooShort);
+  }
+  if (!GetFixed64(input, &counter)) {
+    return rocksdb::Status::InvalidArgument(kErrMetadataTooShort);
+  }
+
+  size_t array_size = width * depth;
+  array.resize(array_size);
+
+  for (size_t i = 0; i < array_size; ++i) {
+    uint32_t count = 0;
+    if (!GetFixed32(input, &count)) {
+      return rocksdb::Status::InvalidArgument(kErrMetadataTooShort);
+    }
+    array[i] = count;
+  }
 
   return rocksdb::Status::OK();
 }
