@@ -51,6 +51,7 @@ enum RedisType : uint8_t {
   kRedisBloomFilter = 9,
   kRedisJson = 10,
   kRedisHyperLogLog = 11,
+  kRedisTimeSeries = 12,
 };
 
 struct RedisTypes {
@@ -92,9 +93,9 @@ enum RedisCommand {
   kRedisCmdLMove,
 };
 
-const std::vector<std::string> RedisTypeNames = {"none",   "string",    "hash",      "list",
-                                                 "set",    "zset",      "bitmap",    "sortedint",
-                                                 "stream", "MBbloom--", "ReJSON-RL", "hyperloglog"};
+const std::vector<std::string> RedisTypeNames = {"none",      "string",      "hash",      "list",   "set",
+                                                 "zset",      "bitmap",      "sortedint", "stream", "MBbloom--",
+                                                 "ReJSON-RL", "hyperloglog", "timeseries"};
 
 constexpr const char *kErrMsgWrongType = "WRONGTYPE Operation against a key holding the wrong kind of value";
 constexpr const char *kErrMsgKeyExpired = "the key was expired";
