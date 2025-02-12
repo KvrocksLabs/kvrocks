@@ -305,8 +305,8 @@ jobs:
           GOCASE_RUN_ARGS=""
           if [[ -n "${{ matrix.with_openssl }}" ]] && [[ "${{ matrix.os }}" == ubuntu* ]]; then
             git clone https://github.com/jsha/minica
-            cd minica && git checkout 96a5c93723cf3d34b50b3e723a9f05cd3765bc67 && go build && cd ..
-            ./minica/minica --domains localhost
+            cd minica && git checkout v1.1.0 && go build && cd ..
+            ./minica/minica --ca-alg rsa --domains localhost
             cp localhost/cert.pem tests/gocase/tls/cert/server.crt
             cp localhost/key.pem tests/gocase/tls/cert/server.key
             cp minica.pem tests/gocase/tls/cert/ca.crt
