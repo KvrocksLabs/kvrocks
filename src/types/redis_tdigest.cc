@@ -70,7 +70,7 @@ class DummyCentroids {
     }
 
     // The Prev function can only be called for item is not cend,
-    // because we must gurantee the iterator to be inside the valid range before iteration.
+    // because we must guarantee the iterator to be inside the valid range before iteration.
     bool Prev() {
       if (Valid() && iter_ != centroids_.cbegin()) {
         std::advance(iter_, -1);
