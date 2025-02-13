@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: apache/skywalking-eyes/header@v0.6.0
+      - uses: apache/skywalking-eyes/header@v0.7.0
         with:
           config: .github/config/licenserc.yml
       - uses: actions/setup-go@v5
