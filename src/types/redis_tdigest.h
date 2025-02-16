@@ -32,6 +32,8 @@
 #include "tdigest.h"
 
 namespace redis {
+uint32_t constexpr kTDigestMaxCompression = 1000;  // limit the compression to 1k
+
 struct CentroidWithKey {
   Centroid centroid;
   rocksdb::Slice key;

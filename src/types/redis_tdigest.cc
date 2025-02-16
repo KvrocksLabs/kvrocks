@@ -108,12 +108,11 @@ class DummyCentroids {
 };
 
 uint32_t constexpr kMaxElements = 1 * 1024;  // 1k doubles
-uint32_t constexpr kMaxCompression = 1000;   // limit the compression to 1k
 
 rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
                                 bool* exists) {
-  if (options.compression > kMaxCompression) {
-    return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kMaxCompression));
+  if (options.compression > kTDigestMaxCompression) {
+    return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kTDigestMaxCompression));
   }
 
   auto ns_key = AppendNamespacePrefix(digest_name);
