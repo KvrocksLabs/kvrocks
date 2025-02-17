@@ -23,6 +23,7 @@
 #include "server/redis_reply.h"
 #include "server/server.h"
 #include "status.h"
+#include "string_util.h"
 #include "types/redis_tdigest.h"
 
 namespace redis {
@@ -33,14 +34,17 @@ class CommandTDigestCreate : public Commander {
     CommandParser parser(args, 1);
     key_name_ = GET_OR_RET(parser.TakeStr());
     options_.compression = 100;
+    if (args.size() != 2 && (args.size() != 4 || !util::EqualICase("compression", args[2]))) {
+      return {Status::RedisParseErr, "wrong number of arguments for 'tdigest.create' command"};
+    }
     if (parser.EatEqICase("compression")) {
       auto compression = GET_OR_RET(parser.TakeInt<int32_t>());
       if (compression <= 0) {
-        return {Status::RedisParseErr, "TDIGEST: compression parameter needs to be a positive integer"};
+        return {Status::RedisParseErr, "T-Digest: compression parameter needs to be a positive integer"};
       }
       if (compression < 1 || compression > static_cast<int32_t>(kTDigestMaxCompression)) {
         return {Status::RedisParseErr,
-                "TDIGEST: compression must be between 1 and " + std::to_string(kTDigestMaxCompression)};
+                "T-Digest: compression must be between 1 and " + std::to_string(kTDigestMaxCompression)};
       }
       options_.compression = static_cast<uint32_t>(compression);
     }
@@ -55,7 +59,7 @@ class CommandTDigestCreate : public Commander {
     auto s = tdigest.Create(ctx, key_name_, options_, &exists);
     if (!s.ok()) {
       if (exists) {
-        return {Status::RedisExecErr, "TDIGEST: already exists"};
+        return {Status::RedisExecErr, "T-Digest: key already exists"};
       }
       return {Status::RedisExecErr, s.ToString()};
     }
@@ -71,17 +75,21 @@ class CommandTDigestCreate : public Commander {
 class CommandTDigestInfo : public Commander {
  public:
   Status Parse(const std::vector<std::string> &args) override {
+    if (args.size() != 2) {
+      return {Status::RedisParseErr, "wrong number of arguments for 'tdigest.info' command"};
+    }
     key_name_ = args[1];
     return Status::OK();
   }
 
   Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
     TDigest tdigest(srv->storage, conn->GetNamespace());
+    LOG(INFO) << "TDIGEST: Info " << key_name_;
     TDigestMetadata metadata;
     auto s = tdigest.GetMetaData(ctx, key_name_, &metadata);
     if (!s.ok()) {
       if (s.IsNotFound()) {
-        return {Status::RedisExecErr, "TDIGEST: key not found"};
+        return {Status::RedisExecErr, "T-Digest: key does not exist"};
       }
       return {Status::RedisExecErr, s.ToString()};
     }

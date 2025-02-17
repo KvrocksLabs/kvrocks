@@ -120,7 +120,6 @@ rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, 
   capacity = ((capacity < kMaxElements) ? capacity : kMaxElements);
   TDigestMetadata metadata(options.compression, capacity);
 
-  LockGuard guard(storage_->GetLockManager(), ns_key);
   auto status = GetMetaData(ctx, ns_key, &metadata);
   *exists = status.ok();
   if (*exists) {
@@ -238,7 +237,8 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
   return rocksdb::Status::OK();
 }
 
-rocksdb::Status TDigest::GetMetaData(engine::Context& context, const Slice& ns_key, TDigestMetadata* metadata) {
+rocksdb::Status TDigest::GetMetaData(engine::Context& context, const Slice& digest_name, TDigestMetadata* metadata) {
+  auto ns_key = AppendNamespacePrefix(digest_name);
   return Database::GetMetadata(context, {kRedisTDigest}, ns_key, metadata);
 }
 
