@@ -22,6 +22,8 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "search/ir.h"
 
 using namespace kqir;
@@ -68,10 +70,16 @@ TEST(IntervalSet, Simple) {
             IntervalSet({2, 5}) | IntervalSet({7, 8}));
   ASSERT_EQ(~IntervalSet({2, 8}), IntervalSet({IntervalSet::minf, 2}) | IntervalSet({8, IntervalSet::inf}));
 
+  std::uniform_real_distribution<double> dist;
+  std::uniform_int_distribution<int> dist_int(0, 50);
+  std::random_device rd{};
+  // Using random seed 0
+  std::mt19937 rand_gen(rd()); // NOSONAR
   for (auto i = 0; i < 2000; ++i) {
-    auto gen = [] { return static_cast<double>(std::rand()) / 100; };
-    auto geni = [&gen] {
-      auto r = std::rand() % 50;
+    // generate random double
+    auto gen = [&dist, &rand_gen] { return dist(rand_gen); };
+    auto geni = [&dist_int, &rand_gen, &gen] {
+      int r = dist_int(rand_gen);
       if (r == 0) {
         return IntervalSet(NumericCompareExpr::GET, gen());
       } else if (r == 1) {
