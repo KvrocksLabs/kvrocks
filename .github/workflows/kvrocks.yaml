@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: apache/skywalking-eyes/header@v0.6.0
+      - uses: apache/skywalking-eyes/header@v0.7.0
         with:
           config: .github/config/licenserc.yml
       - uses: actions/setup-go@v5
@@ -312,7 +312,7 @@ jobs:
             cp minica.pem tests/gocase/tls/cert/ca.crt
             GOCASE_RUN_ARGS="-tlsEnable"
           fi
-          ./x.py test go build $GOCASE_RUN_ARGS ${{ matrix.ignore_when_tsan}}
+          ./x.py test go build -parallel 2 $GOCASE_RUN_ARGS ${{ matrix.ignore_when_tsan}}
 
       - name: Install redis-py
         run: pip3 install redis==5.2.0
@@ -554,7 +554,7 @@ jobs:
         run: |
           export PATH=$PATH:$HOME/local/bin/
           GOCASE_RUN_ARGS=""
-          ./x.py test go build $GOCASE_RUN_ARGS
+          ./x.py test go build -parallel 2 $GOCASE_RUN_ARGS
 
       - name: Install redis-py for openSUSE and Rocky
         if: ${{ !startsWith(matrix.image, 'archlinux') && !startsWith(matrix.image, 'debian') && !startsWith(matrix.image, 'alpine') }}
