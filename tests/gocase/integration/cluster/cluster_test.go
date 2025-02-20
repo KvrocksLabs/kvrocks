@@ -33,6 +33,7 @@ import (
 )
 
 func TestDisableCluster(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{})
 	defer srv.Close()
 
@@ -46,6 +47,7 @@ func TestDisableCluster(t *testing.T) {
 }
 
 func TestClusterKeySlot(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})
 	defer srv.Close()
 
@@ -60,6 +62,7 @@ func TestClusterKeySlot(t *testing.T) {
 }
 
 func TestClusterNodes(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})
 	defer srv.Close()
 
@@ -154,6 +157,7 @@ func TestClusterNodes(t *testing.T) {
 }
 
 func TestClusterReplicas(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	srv1 := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})
 	rdb1 := srv1.NewClient()
@@ -313,6 +317,7 @@ func TestClusterComplexTopology(t *testing.T) {
 }
 
 func TestClusterSlotSet(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	srv1 := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})
@@ -374,6 +379,7 @@ func TestClusterSlotSet(t *testing.T) {
 }
 
 func TestClusterMultiple(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	var srv []*util.KvrocksServer
@@ -499,6 +505,7 @@ func TestClusterMultiple(t *testing.T) {
 }
 
 func TestClusterReset(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	srv0 := util.StartServer(t, map[string]string{"cluster-enabled": "yes"})

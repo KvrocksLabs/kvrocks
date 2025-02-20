@@ -36,6 +36,7 @@ import (
 )
 
 func TestRenameCommand(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{
 		"resp3-enabled":       "no",
 		"rename-command KEYS": "KEYSNEW",
@@ -62,6 +63,7 @@ func TestRenameCommand(t *testing.T) {
 }
 
 func TestSetConfigBackupDir(t *testing.T) {
+	t.Parallel()
 	configs := map[string]string{}
 	srv := util.StartServer(t, configs)
 	defer srv.Close()
@@ -109,6 +111,7 @@ func TestSetConfigBackupDir(t *testing.T) {
 }
 
 func TestConfigSetCompression(t *testing.T) {
+	t.Parallel()
 	configs := map[string]string{}
 	srv := util.StartServer(t, configs)
 	defer srv.Close()
@@ -130,6 +133,7 @@ func TestConfigSetCompression(t *testing.T) {
 }
 
 func TestConfigGetRESP3(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{
 		"resp3-enabled": "yes",
 	})
@@ -143,6 +147,7 @@ func TestConfigGetRESP3(t *testing.T) {
 }
 
 func TestStartWithoutConfigurationFile(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServerWithCLIOptions(t, false, map[string]string{}, []string{})
 	defer srv.Close()
 
@@ -155,6 +160,7 @@ func TestStartWithoutConfigurationFile(t *testing.T) {
 }
 
 func TestDynamicChangeWorkerThread(t *testing.T) {
+	t.Parallel()
 	configs := map[string]string{}
 	srv := util.StartServer(t, configs)
 	defer srv.Close()
@@ -243,6 +249,7 @@ func TestDynamicChangeWorkerThread(t *testing.T) {
 }
 
 func TestChangeProtoMaxBulkLen(t *testing.T) {
+	t.Parallel()
 	configs := map[string]string{}
 	srv := util.StartServer(t, configs)
 	defer srv.Close()
@@ -273,6 +280,7 @@ func TestChangeProtoMaxBulkLen(t *testing.T) {
 }
 
 func TestGetConfigTxnContext(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{
 		"txn-context-enabled": "yes",
 	})
@@ -294,6 +302,7 @@ func TestGetConfigTxnContext(t *testing.T) {
 }
 
 func TestGenerateConfigsMatrix(t *testing.T) {
+	t.Parallel()
 	configOptions := []util.ConfigOptions{
 		{
 			Name:       "txn-context-enabled",
@@ -318,6 +327,7 @@ func TestGenerateConfigsMatrix(t *testing.T) {
 }
 
 func TestGetConfigSkipBlockCacheDeallocationOnClose(t *testing.T) {
+	t.Parallel()
 	srv := util.StartServer(t, map[string]string{
 		"skip-block-cache-deallocation-on-close": "yes",
 	})
