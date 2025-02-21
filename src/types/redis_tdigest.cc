@@ -120,7 +120,7 @@ rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, 
   capacity = ((capacity < kMaxElements) ? capacity : kMaxElements);
   TDigestMetadata metadata(options.compression, capacity);
 
-  auto status = GetMetaData(ctx, ns_key, &metadata);
+  auto status = getMetaDataByNsKey(ctx, ns_key, &metadata);
   *exists = status.ok();
   if (*exists) {
     return rocksdb::Status::InvalidArgument("tdigest already exists");
@@ -150,7 +150,7 @@ rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, con
   LockGuard guard(storage_->GetLockManager(), ns_key);
 
   TDigestMetadata metadata;
-  if (auto status = GetMetaData(ctx, ns_key, &metadata); !status.ok()) {
+  if (auto status = getMetaDataByNsKey(ctx, ns_key, &metadata); !status.ok()) {
     return status;
   }
 
@@ -190,7 +190,7 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
   {
     LockGuard guard(storage_->GetLockManager(), ns_key);
 
-    if (auto status = GetMetaData(ctx, ns_key, &metadata); !status.ok()) {
+    if (auto status = getMetaDataByNsKey(ctx, ns_key, &metadata); !status.ok()) {
       return status;
     }
 
@@ -239,6 +239,10 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
 
 rocksdb::Status TDigest::GetMetaData(engine::Context& context, const Slice& digest_name, TDigestMetadata* metadata) {
   auto ns_key = AppendNamespacePrefix(digest_name);
+  return Database::GetMetadata(context, {kRedisTDigest}, ns_key, metadata);
+}
+
+rocksdb::Status TDigest::getMetaDataByNsKey(engine::Context& context, const Slice& ns_key, TDigestMetadata* metadata) {
   return Database::GetMetadata(context, {kRedisTDigest}, ns_key, metadata);
 }
 

@@ -74,6 +74,8 @@ class TDigest : public SubKeyScanner {
 
   rocksdb::ColumnFamilyHandle* cf_handle_;
 
+  rocksdb::Status getMetaDataByNsKey(engine::Context& context, const Slice& digest_name, TDigestMetadata* metadata);
+
   rocksdb::Status appendBuffer(engine::Context& ctx, ObserverOrUniquePtr<rocksdb::WriteBatchBase>& batch,
                                const std::string& ns_key, const std::vector<double>& inputs, TDigestMetadata* metadata);
 
