@@ -962,10 +962,6 @@ class CommandSlaveOf : public Commander {
 
       *output = redis::RESP_OK;
       LOG(WARNING) << "MASTER MODE enabled (user request from '" << conn->GetAddr() << "')";
-      if (srv->GetConfig()->cluster_enabled) {
-        srv->slot_migrator->SetStopMigrationFlag(false);
-        LOG(INFO) << "Change server role to master, restart migration task";
-      }
 
       return Status::OK();
     }
@@ -977,10 +973,6 @@ class CommandSlaveOf : public Commander {
       *output = redis::RESP_OK;
       LOG(WARNING) << "SLAVE OF " << host_ << ":" << port_ << " enabled (user request from '" << conn->GetAddr()
                    << "')";
-      if (srv->GetConfig()->cluster_enabled) {
-        srv->slot_migrator->SetStopMigrationFlag(true);
-        LOG(INFO) << "Change server role to slave, stop migration task";
-      }
     } else {
       LOG(ERROR) << "SLAVE OF " << host_ << ":" << port_ << " (user request from '" << conn->GetAddr()
                  << "') encounter error: " << s.Msg();
