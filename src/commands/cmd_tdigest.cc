@@ -63,7 +63,6 @@ class CommandTDigestCreate : public Commander {
       options_.compression = static_cast<uint32_t>(compression);
     }
     if (parser.Good()) {
-      parser.RawTake();
       return {Status::RedisParseErr, errWrongNumOfArguments};
     }
 
