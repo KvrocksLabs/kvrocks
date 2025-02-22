@@ -23,20 +23,11 @@
 #include "server/redis_reply.h"
 #include "server/server.h"
 #include "status.h"
-#include "string_util.h"
 #include "types/redis_tdigest.h"
 
 namespace redis {
 namespace {
 constexpr auto kCompressionArg = "compression";
-constexpr auto kErrWrongKeyword = "wrong keyword";
-constexpr auto kErrWrongNumOfArguments = "wrong number of arguments";
-constexpr auto kErrParseCompression = "error parsing compression parameter";
-constexpr auto kErrCompressionMustBePositive = "compression parameter needs to be a positive integer";
-const static auto kErrCompressionOutOfRange =
-    "compression must be between 1 and " + std::to_string(kTDigestMaxCompression);
-constexpr auto kErrKeyNotFound = "key does not exist";
-constexpr auto kErrKeyAlreadyExists = "key already exists";
 
 constexpr auto kInfoCompression = "Compression";
 constexpr auto kInfoCapacity = "Capacity";
@@ -56,24 +47,24 @@ class CommandTDigestCreate : public Commander {
     options_.compression = 100;
     if (parser.EatEqICase(kCompressionArg)) {
       if (!parser.Good()) {
-        return {Status::RedisParseErr, kErrWrongNumOfArguments};
+        return {Status::RedisParseErr, errWrongNumOfArguments};
       }
       auto status = parser.TakeInt<int32_t>();
       if (!status) {
-        return {Status::RedisParseErr, kErrParseCompression};
+        return {Status::RedisParseErr, errParseCompression};
       }
       auto compression = *status;
       if (compression <= 0) {
-        return {Status::RedisParseErr, kErrCompressionMustBePositive};
+        return {Status::RedisParseErr, errCompressionMustBePositive};
       }
       if (compression < 1 || compression > static_cast<int32_t>(kTDigestMaxCompression)) {
-        return {Status::RedisParseErr, kErrCompressionOutOfRange};
+        return {Status::RedisParseErr, errCompressionOutOfRange};
       }
       options_.compression = static_cast<uint32_t>(compression);
     }
     if (parser.Good()) {
       parser.RawTake();
-      return {Status::RedisParseErr, parser.Good() ? kErrWrongKeyword : kErrWrongNumOfArguments};
+      return {Status::RedisParseErr, errWrongNumOfArguments};
     }
 
     return Status::OK();
@@ -85,7 +76,7 @@ class CommandTDigestCreate : public Commander {
     auto s = tdigest.Create(ctx, key_name_, options_, &exists);
     if (!s.ok()) {
       if (exists) {
-        return {Status::RedisExecErr, kErrKeyAlreadyExists};
+        return {Status::RedisExecErr, errKeyAlreadyExists};
       }
       return {Status::RedisExecErr, s.ToString()};
     }
@@ -111,7 +102,7 @@ class CommandTDigestInfo : public Commander {
     auto s = tdigest.GetMetaData(ctx, key_name_, &metadata);
     if (!s.ok()) {
       if (s.IsNotFound()) {
-        return {Status::RedisExecErr, kErrKeyNotFound};
+        return {Status::RedisExecErr, errKeyNotFound};
       }
       return {Status::RedisExecErr, s.ToString()};
     }

@@ -31,7 +31,6 @@ import (
 
 const (
 	errMsgWrongNumberArg   = "wrong number of arguments"
-	errMsgWrongKeyword     = "wrong keyword"
 	errMsgParseCompression = "error parsing compression parameter"
 	errMsgNeedToBePositive = "compression parameter needs to be a positive integer"
 	errMsgMustInRange      = "compression must be between 1 and 1000"
@@ -94,7 +93,7 @@ func tdigestTests(t *testing.T, configs util.KvrocksServerConfigs) {
 		keyPrefix := "tdigest_create_"
 		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE").Err(), errMsgWrongNumberArg)
 		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "hahah").Err(), errMsgWrongNumberArg)
-		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "1", "hahah").Err(), errMsgWrongKeyword)
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "1", "hahah").Err(), errMsgWrongNumberArg)
 		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "compression").Err(), errMsgWrongNumberArg)
 		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "compression", "hahah").Err(), errMsgParseCompression)
 		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key", "compression", "0").Err(), errMsgNeedToBePositive)
@@ -127,17 +126,19 @@ func tdigestTests(t *testing.T, configs util.KvrocksServerConfigs) {
 			require.EqualValues(t, 0, info.TotalCompressions)
 		}
 
-		// require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key1", "compression", "1000").Err())
-		// rsp = rdb.Do(ctx, "TDIGEST.INFO", keyPrefix+"key1")
-		// require.NoError(t, rsp.Err())
-		// info = toTdigestInfo(t, rsp.Val())
-		// require.EqualValues(t, 1000, info.Compression)
-		// require.EqualValues(t, 1024, info.Capacity) // max is 1024
-		// require.EqualValues(t, 0, info.MergedNodes)
-		// require.EqualValues(t, 0, info.UnmergedNodes)
-		// require.EqualValues(t, 0, info.MergedWeight)
-		// require.EqualValues(t, 0, info.UnmergedWeight)
-		// require.EqualValues(t, 0, info.Observations)
-		// require.EqualValues(t, 0, info.TotalCompressions)
+		{
+			require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", keyPrefix+"key1", "compression", "1000").Err())
+			rsp := rdb.Do(ctx, "TDIGEST.INFO", keyPrefix+"key1")
+			require.NoError(t, rsp.Err())
+			info := toTdigestInfo(t, rsp.Val())
+			require.EqualValues(t, 1000, info.Compression)
+			require.EqualValues(t, 1024, info.Capacity) // max is 1024
+			require.EqualValues(t, 0, info.MergedNodes)
+			require.EqualValues(t, 0, info.UnmergedNodes)
+			require.EqualValues(t, 0, info.MergedWeight)
+			require.EqualValues(t, 0, info.UnmergedWeight)
+			require.EqualValues(t, 0, info.Observations)
+			require.EqualValues(t, 0, info.TotalCompressions)
+		}
 	})
 }

@@ -45,4 +45,9 @@ inline constexpr const char *errNoMatchingScript = "No matching script. Please u
 inline constexpr const char *errUnknownOption = "unknown option";
 inline constexpr const char *errUnknownSubcommandOrWrongArguments = "Unknown subcommand or wrong number of arguments";
 inline constexpr const char *errRestoringBackup = "kvrocks is restoring the db from backup";
+inline constexpr const char *errParseCompression = "error parsing compression parameter";
+inline constexpr const char *errCompressionMustBePositive = "compression parameter needs to be a positive integer";
+inline constexpr const char *errCompressionOutOfRange = "compression must be between 1 and 1000";
+inline constexpr const char *errKeyNotFound = "key does not exist";
+inline constexpr const char *errKeyAlreadyExists = "key already exists";
 }  // namespace redis
