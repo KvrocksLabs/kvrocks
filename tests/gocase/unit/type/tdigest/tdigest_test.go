@@ -31,12 +31,12 @@ import (
 
 const (
 	errMsgWrongNumberArg   = "wrong number of arguments"
-	errMsgWrongKeyword     = "T-Digest: wrong keyword"
-	errMsgParseCompression = "T-Digest: error parsing compression parameter"
-	errMsgNeedToBePositive = "T-Digest: compression parameter needs to be a positive integer"
-	errMsgMustInRange      = "T-Digest: compression must be between 1 and 1000"
-	errMsgKeyAlreadyExists = "T-Digest: key already exists"
-	errMsgKeyNotExist      = "T-Digest: key does not exist"
+	errMsgWrongKeyword     = "wrong keyword"
+	errMsgParseCompression = "error parsing compression parameter"
+	errMsgNeedToBePositive = "compression parameter needs to be a positive integer"
+	errMsgMustInRange      = "compression must be between 1 and 1000"
+	errMsgKeyAlreadyExists = "key already exists"
+	errMsgKeyNotExist      = "key does not exist"
 )
 
 type tdigestInfo struct {
@@ -48,7 +48,7 @@ type tdigestInfo struct {
 	UnmergedWeight    int64
 	Observations      int64
 	TotalCompressions int64
-	MemoryUsage       int64
+	// memroy usgae is not useful, no we do not support it
 }
 
 func toTdigestInfo(t *testing.T, value interface{}) tdigestInfo {
@@ -63,7 +63,6 @@ func toTdigestInfo(t *testing.T, value interface{}) tdigestInfo {
 		UnmergedWeight:    v["Unmerged weight"].(int64),
 		Observations:      v["Observations"].(int64),
 		TotalCompressions: v["Total compressions"].(int64),
-		MemoryUsage:       v["Memory usage"].(int64),
 	}
 }
 

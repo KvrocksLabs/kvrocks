@@ -29,15 +29,14 @@
 namespace redis {
 namespace {
 constexpr auto kCompressionArg = "compression";
-constexpr auto kErrWrongKeyword = "T-Digest: wrong keyword";
-constexpr auto kErrWrongNumOfCreateArguments = "wrong number of arguments for 'tdigest.create' command";
-constexpr auto kErrWrongNumOfInfoArguments = "wrong number of arguments for 'tdigest.info' command";
-constexpr auto kErrParseCompression = "T-Digest: error parsing compression parameter";
-constexpr auto kErrCompressionMustBePositive = "T-Digest: compression parameter needs to be a positive integer";
+constexpr auto kErrWrongKeyword = "wrong keyword";
+constexpr auto kErrWrongNumOfArguments = "wrong number of arguments";
+constexpr auto kErrParseCompression = "error parsing compression parameter";
+constexpr auto kErrCompressionMustBePositive = "compression parameter needs to be a positive integer";
 const static auto kErrCompressionOutOfRange =
-    "T-Digest: compression must be between 1 and " + std::to_string(kTDigestMaxCompression);
-constexpr auto kErrKeyNotFound = "T-Digest: key does not exist";
-constexpr auto kErrKeyAlreadyExists = "T-Digest: key already exists";
+    "compression must be between 1 and " + std::to_string(kTDigestMaxCompression);
+constexpr auto kErrKeyNotFound = "key does not exist";
+constexpr auto kErrKeyAlreadyExists = "key already exists";
 
 constexpr auto kInfoCompression = "Compression";
 constexpr auto kInfoCapacity = "Capacity";
@@ -47,7 +46,6 @@ constexpr auto kInfoMergedWeight = "Merged weight";
 constexpr auto kInfoUnmergedWeight = "Unmerged weight";
 constexpr auto kInfoObservations = "Observations";
 constexpr auto kInfoTotalCompressions = "Total compressions";
-constexpr auto kInfoMemoryUsage = "Memory usage";
 }  // namespace
 
 class CommandTDigestCreate : public Commander {
@@ -56,11 +54,10 @@ class CommandTDigestCreate : public Commander {
     CommandParser parser(args, 1);
     key_name_ = GET_OR_RET(parser.TakeStr());
     options_.compression = 100;
-    bool invalid_keyword = false;
-    if (args.size() != 2 && (args.size() != 4 || (invalid_keyword = !util::EqualICase(kCompressionArg, args[2])))) {
-      return {Status::RedisParseErr, invalid_keyword ? kErrWrongKeyword : kErrWrongNumOfCreateArguments};
-    }
     if (parser.EatEqICase(kCompressionArg)) {
+      if (!parser.Good()) {
+        return {Status::RedisParseErr, kErrWrongNumOfArguments};
+      }
       auto status = parser.TakeInt<int32_t>();
       if (!status) {
         return {Status::RedisParseErr, kErrParseCompression};
@@ -73,6 +70,10 @@ class CommandTDigestCreate : public Commander {
         return {Status::RedisParseErr, kErrCompressionOutOfRange};
       }
       options_.compression = static_cast<uint32_t>(compression);
+    }
+    if (parser.Good()) {
+      parser.RawTake();
+      return {Status::RedisParseErr, parser.Good() ? kErrWrongKeyword : kErrWrongNumOfArguments};
     }
 
     return Status::OK();
@@ -100,9 +101,6 @@ class CommandTDigestCreate : public Commander {
 class CommandTDigestInfo : public Commander {
  public:
   Status Parse(const std::vector<std::string> &args) override {
-    if (args.size() != 2) {
-      return {Status::RedisParseErr, kErrWrongNumOfInfoArguments};
-    }
     key_name_ = args[1];
     return Status::OK();
   }
@@ -118,7 +116,7 @@ class CommandTDigestInfo : public Commander {
       return {Status::RedisExecErr, s.ToString()};
     }
 
-    output->append(conn->HeaderOfMap(9));
+    output->append(conn->HeaderOfMap(8));
     output->append(redis::BulkString(kInfoCompression));
     output->append(redis::Integer(metadata.compression));
     output->append(redis::BulkString(kInfoCapacity));
@@ -135,8 +133,7 @@ class CommandTDigestInfo : public Commander {
     output->append(redis::Integer(metadata.total_observations));
     output->append(redis::BulkString(kInfoTotalCompressions));
     output->append(redis::Integer(metadata.merge_times));
-    output->append(redis::BulkString(kInfoMemoryUsage));
-    output->append(redis::Integer(sizeof(TDigest)));
+    // "Memory usage" is not meaningful for kvrocks, so we don't provide it here.
     return Status::OK();
   }
 
