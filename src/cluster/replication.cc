@@ -1039,7 +1039,7 @@ bool ReplicationThread::isRestoringError(std::string_view err) {
 
 bool ReplicationThread::isWrongPsyncNum(std::string_view err) {
   // err doesn't contain the CRLF, so cannot use redis::Error here.
-  return err == RESP_PREFIX_ERROR + redis::StatusToRedisErrorMsg({Status::NotOK, redis::errWrongNumArguments});
+  return err == RESP_PREFIX_ERROR + redis::StatusToRedisErrorMsg({Status::NotOK, redis::errWrongNumOfArguments});
 }
 
 bool ReplicationThread::isUnknownOption(std::string_view err) {
