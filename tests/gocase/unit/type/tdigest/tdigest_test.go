@@ -48,7 +48,7 @@ type tdigestInfo struct {
 	UnmergedWeight    int64
 	Observations      int64
 	TotalCompressions int64
-	// memroy usgae is not useful, no we do not support it
+	// memory usgae is not useful, we do not support it now
 }
 
 func toTdigestInfo(t *testing.T, value interface{}) tdigestInfo {
