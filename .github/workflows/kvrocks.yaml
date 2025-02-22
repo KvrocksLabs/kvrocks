@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check typos
-        uses: crate-ci/typos@v1.29.5
+        uses: crate-ci/typos@v1.29.7
         with:
           config: .github/config/typos.toml
 
