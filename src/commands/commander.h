@@ -108,6 +108,7 @@ enum class CommandCategory : uint8_t {
   SortedInt,
   Stream,
   String,
+  TDigest,
   Txn,
   ZSet,
 };

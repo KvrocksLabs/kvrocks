@@ -150,9 +150,8 @@ TEST_F(RedisTDigestTest, Create) {
   ASSERT_TRUE(exists);
   ASSERT_TRUE(status.IsInvalidArgument());
 
-  auto ns_key = tdigest_->AppendNamespacePrefix(test_digest_name);
   TDigestMetadata metadata;
-  auto get_status = tdigest_->GetMetaData(*ctx_, ns_key, &metadata);
+  auto get_status = tdigest_->GetMetaData(*ctx_, test_digest_name, &metadata);
   ASSERT_TRUE(get_status.ok()) << get_status.ToString();
   ASSERT_EQ(metadata.compression, 100) << metadata.compression;
 }

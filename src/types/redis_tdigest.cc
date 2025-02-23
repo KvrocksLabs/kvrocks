@@ -108,12 +108,11 @@ class DummyCentroids {
 };
 
 uint32_t constexpr kMaxElements = 1 * 1024;  // 1k doubles
-uint32_t constexpr kMaxCompression = 1000;   // limit the compression to 1k
 
 rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, const TDigestCreateOptions& options,
                                 bool* exists) {
-  if (options.compression > kMaxCompression) {
-    return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kMaxCompression));
+  if (options.compression > kTDigestMaxCompression) {
+    return rocksdb::Status::InvalidArgument(fmt::format("compression should be less than {}", kTDigestMaxCompression));
   }
 
   auto ns_key = AppendNamespacePrefix(digest_name);
@@ -121,8 +120,7 @@ rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, 
   capacity = ((capacity < kMaxElements) ? capacity : kMaxElements);
   TDigestMetadata metadata(options.compression, capacity);
 
-  LockGuard guard(storage_->GetLockManager(), ns_key);
-  auto status = GetMetaData(ctx, ns_key, &metadata);
+  auto status = getMetaDataByNsKey(ctx, ns_key, &metadata);
   *exists = status.ok();
   if (*exists) {
     return rocksdb::Status::InvalidArgument("tdigest already exists");
@@ -152,7 +150,7 @@ rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, con
   LockGuard guard(storage_->GetLockManager(), ns_key);
 
   TDigestMetadata metadata;
-  if (auto status = GetMetaData(ctx, ns_key, &metadata); !status.ok()) {
+  if (auto status = getMetaDataByNsKey(ctx, ns_key, &metadata); !status.ok()) {
     return status;
   }
 
@@ -192,7 +190,7 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
   {
     LockGuard guard(storage_->GetLockManager(), ns_key);
 
-    if (auto status = GetMetaData(ctx, ns_key, &metadata); !status.ok()) {
+    if (auto status = getMetaDataByNsKey(ctx, ns_key, &metadata); !status.ok()) {
       return status;
     }
 
@@ -239,7 +237,12 @@ rocksdb::Status TDigest::Quantile(engine::Context& ctx, const Slice& digest_name
   return rocksdb::Status::OK();
 }
 
-rocksdb::Status TDigest::GetMetaData(engine::Context& context, const Slice& ns_key, TDigestMetadata* metadata) {
+rocksdb::Status TDigest::GetMetaData(engine::Context& context, const Slice& digest_name, TDigestMetadata* metadata) {
+  auto ns_key = AppendNamespacePrefix(digest_name);
+  return Database::GetMetadata(context, {kRedisTDigest}, ns_key, metadata);
+}
+
+rocksdb::Status TDigest::getMetaDataByNsKey(engine::Context& context, const Slice& ns_key, TDigestMetadata* metadata) {
   return Database::GetMetadata(context, {kRedisTDigest}, ns_key, metadata);
 }
 

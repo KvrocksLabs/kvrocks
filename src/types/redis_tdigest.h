@@ -32,6 +32,8 @@
 #include "tdigest.h"
 
 namespace redis {
+inline constexpr uint32_t kTDigestMaxCompression = 1000;  // limit the compression to 1k
+
 struct CentroidWithKey {
   Centroid centroid;
   rocksdb::Slice key;
@@ -71,6 +73,8 @@ class TDigest : public SubKeyScanner {
   enum class SegmentType : uint8_t { kBuffer = 0, kCentroids = 1, kGuardFlag = 0xFF };
 
   rocksdb::ColumnFamilyHandle* cf_handle_;
+
+  rocksdb::Status getMetaDataByNsKey(engine::Context& context, const Slice& digest_name, TDigestMetadata* metadata);
 
   rocksdb::Status appendBuffer(engine::Context& ctx, ObserverOrUniquePtr<rocksdb::WriteBatchBase>& batch,
                                const std::string& ns_key, const std::vector<double>& inputs, TDigestMetadata* metadata);
