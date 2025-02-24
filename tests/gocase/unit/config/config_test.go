@@ -347,3 +347,27 @@ func TestGetConfigSkipBlockCacheDeallocationOnClose(t *testing.T) {
 	val = rdb.ConfigGet(ctx, "skip-block-cache-deallocation-on-close").Val()
 	require.EqualValues(t, "no", val["skip-block-cache-deallocation-on-close"])
 }
+
+func TestConfigRocksDBOptions(t *testing.T) {
+	t.Parallel()
+	srv := util.StartServer(t, map[string]string{})
+	defer srv.Close()
+
+	rdb := srv.NewClient()
+	defer func() { require.NoError(t, rdb.Close()) }()
+
+	t.Run("Get and Set rocksdb.max_compaction_bytes", func(t *testing.T) {
+		ctx := context.Background()
+		parameter := "rocksdb.max_compaction_bytes"
+		result, err := rdb.ConfigGet(ctx, parameter).Result()
+		require.NoError(t, err)
+		require.EqualValues(t, "0", result[parameter])
+
+		util.ErrorRegexp(t, rdb.ConfigSet(ctx, parameter, "-1").Err(), ".*out of numeric range")
+
+		require.NoError(t, rdb.ConfigSet(ctx, parameter, "1073741824").Err())
+		result, err = rdb.ConfigGet(ctx, parameter).Result()
+		require.NoError(t, err)
+		require.EqualValues(t, "1073741824", result[parameter])
+	})
+}

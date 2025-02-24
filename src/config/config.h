@@ -223,6 +223,7 @@ struct Config {
     bool rate_limiter_auto_tuned;
     bool avoid_unnecessary_blocking_io = true;
     bool partition_filters;
+    int64_t max_compaction_bytes;
 
     struct WriteOptions {
       bool sync;

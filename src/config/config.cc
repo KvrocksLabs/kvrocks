@@ -299,6 +299,7 @@ Config::Config() {
       {"rocksdb.rate_limiter_auto_tuned", true, new YesNoField(&rocks_db.rate_limiter_auto_tuned, true)},
       {"rocksdb.avoid_unnecessary_blocking_io", true, new YesNoField(&rocks_db.avoid_unnecessary_blocking_io, true)},
       {"rocksdb.partition_filters", true, new YesNoField(&rocks_db.partition_filters, true)},
+      {"rocksdb.max_compaction_bytes", false, new Int64Field(&rocks_db.max_compaction_bytes, 0, 0, INT64_MAX)},
 
       /* rocksdb write options */
       {"rocksdb.write_options.sync", true, new YesNoField(&rocks_db.write_options.sync, false)},
@@ -734,6 +735,7 @@ void Config::initFieldCallback() {
       {"rocksdb.compaction_readahead_size", set_db_option_cb},
       {"rocksdb.max_background_jobs", set_db_option_cb},
 
+      {"rocksdb.max_compaction_bytes", set_cf_option_cb},
       {"rocksdb.max_write_buffer_number", set_cf_option_cb},
       {"rocksdb.level0_slowdown_writes_trigger", set_cf_option_cb},
       {"rocksdb.level0_stop_writes_trigger", set_cf_option_cb},
