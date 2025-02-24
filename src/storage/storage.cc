@@ -221,6 +221,7 @@ rocksdb::Options Storage::InitRocksDBOptions() {
   options.max_bytes_for_level_multiplier = config_->rocks_db.max_bytes_for_level_multiplier;
   options.level_compaction_dynamic_level_bytes = config_->rocks_db.level_compaction_dynamic_level_bytes;
   options.max_background_jobs = config_->rocks_db.max_background_jobs;
+  options.max_compaction_bytes = static_cast<uint64_t>(config_->rocks_db.max_compaction_bytes);
 
   // avoid blocking io on iteration
   // see https://github.com/facebook/rocksdb/wiki/IO#avoid-blocking-io
