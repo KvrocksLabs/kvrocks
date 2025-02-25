@@ -115,6 +115,18 @@ struct SemaChecker {
           return {Status::NotOK, fmt::format("tag cannot contain the separator `{}`", meta->separator)};
         }
       }
+    } else if (auto v = dynamic_cast<TextContainExpr *>(node)) {
+      if (auto iter = current_index->fields.find(v->field->name); iter == current_index->fields.end()) {
+        return {Status::NotOK, fmt::format("field `{}` not found in index `{}`", v->field->name)};
+      } else if (auto meta = iter->second.MetadataAs<redis::TextFieldMetadata>(); !meta) {
+        return {Status::NotOK, fmt::format("field `{}` is not a text field", v->field->name)};
+      } else {
+        v->field->info = &iter->second;
+
+        if (v->word->val.empty()) {
+          return {Status::NotOK, "word cannot be an empty string"};
+        }
+      }
     } else if (auto v = dynamic_cast<NumericCompareExpr *>(node)) {
       if (auto iter = current_index->fields.find(v->field->name); iter == current_index->fields.end()) {
         return {Status::NotOK, fmt::format("field `{}` not found in index `{}`", v->field->name, current_index->name)};

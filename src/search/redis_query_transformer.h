@@ -35,10 +35,11 @@ namespace redis_query {
 namespace ir = kqir;
 
 template <typename Rule>
-using TreeSelector = parse_tree::selector<
-    Rule, parse_tree::store_content::on<Number, UnsignedInteger, StringL, Param, Identifier, Inf>,
-    parse_tree::remove_content::on<TagList, NumericRange, VectorRange, ExclusiveNumber, FieldQuery, NotExpr, AndExpr,
-                                   OrExpr, PrefilterExpr, KnnSearch, Wildcard, VectorRangeToken, KnnToken, ArrowOp>>;
+using TreeSelector =
+    parse_tree::selector<Rule, parse_tree::store_content::on<Number, UnsignedInteger, StringL, Param, Identifier, Inf>,
+                         parse_tree::remove_content::on<
+                             TagList, NumericRange, TextContains, VectorRange, ExclusiveNumber, FieldQuery, NotExpr,
+                             AndExpr, OrExpr, PrefilterExpr, KnnSearch, Wildcard, VectorRangeToken, KnnToken, ArrowOp>>;
 
 template <typename Input>
 StatusOr<std::unique_ptr<parse_tree::node>> ParseToTree(Input&& in) {
@@ -78,6 +79,18 @@ struct Transformer : ir::TreeTransformer {
       }
     };
 
+    auto ident_string_or_param = [this](const TreeNode& node) -> StatusOr<std::string> {
+      if (Is<Identifier>(node)) {
+        return node->string();
+      } else if (Is<StringL>(node)) {
+        return GET_OR_RET(UnescapeString(node->string()));
+      } else if (Is<Param>(node)) {
+        return GET_OR_RET(GetParam(node));
+      } else {
+        return {Status::NotOK, "encountered invalid identifier, string or parameter"};
+      }
+    };
+
     if (Is<Number>(node)) {
       return Node::Create<ir::NumericLiteral>(*ParseFloat(node->string()));
     } else if (Is<Wildcard>(node)) {
@@ -92,16 +105,7 @@ struct Transformer : ir::TreeTransformer {
         std::vector<std::unique_ptr<ir::QueryExpr>> exprs;
 
         for (const auto& tag : query->children) {
-          std::string tag_str;
-          if (Is<Identifier>(tag)) {
-            tag_str = tag->string();
-          } else if (Is<StringL>(tag)) {
-            tag_str = GET_OR_RET(UnescapeString(tag->string()));
-          } else if (Is<Param>(tag)) {
-            tag_str = GET_OR_RET(GetParam(tag));
-          } else {
-            return {Status::NotOK, "encountered invalid tag"};
-          }
+          auto tag_str = GET_OR_RET(ident_string_or_param(tag));
 
           exprs.push_back(std::make_unique<ir::TagContainExpr>(std::make_unique<FieldRef>(field),
                                                                std::make_unique<StringLiteral>(tag_str)));
@@ -155,6 +159,10 @@ struct Transformer : ir::TreeTransformer {
         return std::make_unique<VectorRangeExpr>(std::make_unique<FieldRef>(field),
                                                  GET_OR_RET(number_or_param(query->children[1])),
                                                  GET_OR_RET(Transform2Vector(query->children[2])));
+      } else if (Is<TextContains>(query)) {
+        auto text = GET_OR_RET(ident_string_or_param(query->children[1]));
+        return std::make_unique<TextContainExpr>(std::make_unique<FieldRef>(field),
+                                                 std::make_unique<StringLiteral>(text));
       }
     } else if (Is<NotExpr>(node)) {
       CHECK(node->children.size() == 1);

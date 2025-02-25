@@ -139,6 +139,25 @@ struct TagContainExpr : BoolAtomExpr {
   }
 };
 
+struct TextContainExpr : BoolAtomExpr {
+  std::unique_ptr<FieldRef> field;
+  std::unique_ptr<StringLiteral> word;
+
+  TextContainExpr(std::unique_ptr<FieldRef> &&field, std::unique_ptr<StringLiteral> &&word)
+      : field(std::move(field)), word(std::move(word)) {}
+
+  std::string_view Name() const override { return "TextContainExpr"; }
+  std::string Dump() const override { return fmt::format("{} contains {}", field->Dump(), word->Dump()); }
+
+  NodeIterator ChildBegin() override { return {field.get(), word.get()}; };
+  NodeIterator ChildEnd() override { return {}; };
+
+  std::unique_ptr<Node> Clone() const override {
+    return std::make_unique<TagContainExpr>(Node::MustAs<FieldRef>(field->Clone()),
+                                            Node::MustAs<StringLiteral>(word->Clone()));
+  }
+};
+
 struct NumericLiteral : Literal {
   double val;
 

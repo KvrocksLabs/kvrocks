@@ -41,9 +41,9 @@ using TreeSelector = parse_tree::selector<
     Rule,
     parse_tree::store_content::on<Boolean, Number, StringL, Param, Identifier, NumericCompareOp, AscOrDesc,
                                   UnsignedInteger>,
-    parse_tree::remove_content::on<HasTagExpr, NumericCompareExpr, VectorCompareOp, VectorLiteral, VectorCompareExpr,
-                                   VectorRangeExpr, NotExpr, AndExpr, OrExpr, Wildcard, SelectExpr, FromExpr,
-                                   WhereClause, OrderByClause, OrderByExpr, LimitClause, SearchStmt>>;
+    parse_tree::remove_content::on<HasTagExpr, NumericCompareExpr, TextContainsExpr, VectorCompareOp, VectorLiteral,
+                                   VectorCompareExpr, VectorRangeExpr, NotExpr, AndExpr, OrExpr, Wildcard, SelectExpr,
+                                   FromExpr, WhereClause, OrderByClause, OrderByExpr, LimitClause, SearchStmt>>;
 
 template <typename Input>
 StatusOr<std::unique_ptr<parse_tree::node>> ParseToTree(Input&& in) {
@@ -126,6 +126,21 @@ struct Transformer : ir::TreeTransformer {
           std::make_unique<ir::FieldRef>(vector_comp_expr->children[0]->string()),
           GET_OR_RET(number_or_param(node->children[1])),
           Node::MustAs<ir::VectorLiteral>(GET_OR_RET(Transform(vector_comp_expr->children[2]))));
+    } else if (Is<TextContainsExpr>(node)) {
+      CHECK(node->children.size() == 2);
+
+      const auto& word = node->children[1];
+      std::unique_ptr<ir::StringLiteral> res;
+      if (Is<StringL>(word)) {
+        res = Node::MustAs<ir::StringLiteral>(GET_OR_RET(Transform(word)));
+      } else if (Is<Param>(word)) {
+        res = std::make_unique<ir::StringLiteral>(GET_OR_RET(GetParam(word)));
+      } else {
+        return {Status::NotOK, "encountered invalid word"};
+      }
+
+      return Node::Create<ir::TextContainExpr>(std::make_unique<ir::FieldRef>(node->children[0]->string()),
+                                               std::move(res));
     } else if (Is<NotExpr>(node)) {
       CHECK(node->children.size() == 1);
 

@@ -94,6 +94,8 @@ StatusOr<kqir::Value> FieldValueRetriever::ParseFromJson(const jsoncons::json &v
       nums.push_back(val[i].as_double());
     }
     return kqir::MakeValue<kqir::NumericArray>(nums);
+  } else if ([[maybe_unused]] auto text = dynamic_cast<const redis::TextFieldMetadata *>(type)) {
+    return kqir::MakeValue<kqir::String>(val.as_string());
   } else {
     return {Status::NotOK, "unknown field type to retrieve"};
   }
@@ -122,6 +124,8 @@ StatusOr<kqir::Value> FieldValueRetriever::ParseFromHash(const std::string &valu
       vec.push_back(*(reinterpret_cast<const double *>(value.data()) + i));
     }
     return kqir::MakeValue<kqir::NumericArray>(vec);
+  } else if ([[maybe_unused]] auto text = dynamic_cast<const redis::TextFieldMetadata *>(type)) {
+    return kqir::MakeValue<kqir::String>(value);
   } else {
     return {Status::NotOK, "unknown field type to retrieve"};
   }
