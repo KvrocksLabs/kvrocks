@@ -43,7 +43,7 @@ uint64_t intrev64(uint64_t v);
 
 /* variants of the function doing the actual conversion only if the target
  * host is big endian */
-#if (BYTE_ORDER == LITTLE_ENDIAN)
+#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define memrev16ifbe(p) ((void)(0))
 #define memrev32ifbe(p) ((void)(0))
 #define memrev64ifbe(p) ((void)(0))
@@ -61,7 +61,7 @@ uint64_t intrev64(uint64_t v);
 
 /* The functions htonu64() and ntohu64() convert the specified value to
  * network byte ordering and back. In big endian systems they are no-ops. */
-#if (BYTE_ORDER == BIG_ENDIAN)
+#if (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
 #define htonu64(v) (v)
 #define ntohu64(v) (v)
 #else

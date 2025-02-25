@@ -20,10 +20,6 @@
 
 #pragma once
 
-#if defined(__sparc__) || defined(__arm__)
-#define USE_ALIGNED_ACCESS
-#endif
-
 #if defined(__s390__)
 #if defined(__GNUC__) && __GNUC__ < 7
 constexpr size_t CACHE_LINE_SIZE = 64U;
