@@ -39,6 +39,8 @@ struct FieldValue {
 
 enum class HashFetchType { kAll = 0, kOnlyKey = 1, kOnlyValue = 2 };
 
+enum class HashFieldExpireType { None, NX, XX, GT, LT };
+
 namespace redis {
 
 class Hash : public SubKeyScanner {
@@ -68,9 +70,19 @@ class Hash : public SubKeyScanner {
                        std::vector<std::string> *values = nullptr);
   rocksdb::Status RandField(engine::Context &ctx, const Slice &user_key, int64_t command_count,
                             std::vector<FieldValue> *field_values, HashFetchType type = HashFetchType::kOnlyKey);
+  rocksdb::Status ExpireFields(engine::Context &ctx, const Slice &user_key, uint64_t expire_ms,
+                               const std::vector<Slice> &fields, HashFieldExpireType type, std::vector<int8_t> *ret);
+  rocksdb::Status PersistFields(engine::Context &ctx, const Slice &user_key, const std::vector<Slice> &fields,
+                                std::vector<int8_t> *ret);
+  rocksdb::Status TTLFields(engine::Context &ctx, const Slice &user_key, const std::vector<Slice> &fields,
+                            std::vector<int64_t> *ret);
+  uint64_t GetValidFieldCount(engine::Context &ctx, const Slice &ns_key, const HashMetadata &metadata);
+  static bool IsFieldExpired(const Slice &metadata_key, const Slice &value);
 
  private:
   rocksdb::Status GetMetadata(engine::Context &ctx, const Slice &ns_key, HashMetadata *metadata);
+  static rocksdb::Status decodeExpireFromValue(const HashMetadata &metadata, std::string *value, uint64_t &expire);
+  static std::string encodeExpireAndValue(std::string_view value, uint64_t expire);
 
   friend struct FieldValueRetriever;
 };

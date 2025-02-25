@@ -177,6 +177,9 @@ struct Config {
 
   bool skip_block_cache_deallocation_on_close = false;
 
+  // whether to enable hash field expiration feature
+  bool hash_field_expiration = false;
+
   std::vector<double> histogram_bucket_boundaries;
 
   struct RocksDB {
