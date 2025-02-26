@@ -141,4 +141,66 @@ func tdigestTests(t *testing.T, configs util.KvrocksServerConfigs) {
 			require.EqualValues(t, 0, info.TotalCompressions)
 		}
 	})
+
+	t.Run("tdigest.add with different arguments", func(t *testing.T) {
+		keyPrefix := "tdigest_add_"
+
+		// Satisfy the number of parameters
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.ADD").Err(), errMsgWrongNumberArg)
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.ADD", keyPrefix+"key").Err(), errMsgWrongNumberArg)
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.ADD", keyPrefix+"key", "abc").Err(), "not a valid float")
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.ADD", keyPrefix+"nonexistent", "1.0").Err(), errMsgKeyNotExist)
+
+		// Test adding values to a key
+		key := keyPrefix + "test1"
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", key, "compression", "100").Err())
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "42.0").Err())
+
+		rsp := rdb.Do(ctx, "TDIGEST.INFO", key)
+		require.NoError(t, rsp.Err())
+		info := toTdigestInfo(t, rsp.Val())
+		require.EqualValues(t, 1, info.UnmergedNodes)
+		require.EqualValues(t, 1, info.Observations)
+
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "1.0", "2.0", "3.0", "4.0", "5.0").Err())
+
+		rsp = rdb.Do(ctx, "TDIGEST.INFO", key)
+		require.NoError(t, rsp.Err())
+		info = toTdigestInfo(t, rsp.Val())
+		require.EqualValues(t, 6, info.Observations)
+
+		// Test adding values to a key with compression
+		key2 := keyPrefix + "test2"
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", key2, "compression", "100").Err())
+
+		args := []interface{}{key2}
+		for i := 1; i <= 1000; i++ {
+			args = append(args, float64(i))
+		}
+		require.NoError(t, rdb.Do(ctx, append([]interface{}{"TDIGEST.ADD"}, args...)...).Err())
+
+		rsp = rdb.Do(ctx, "TDIGEST.INFO", key2)
+		require.NoError(t, rsp.Err())
+		info = toTdigestInfo(t, rsp.Val())
+		require.EqualValues(t, 1000, info.Observations)
+
+		// Test adding values to a key with compression and merge node
+		key3 := keyPrefix + "test3"
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", key3, "compression", "10").Err())
+
+		args = []interface{}{key3}
+		for i := 1; i <= 100; i++ {
+			args = append(args, float64(i%10))
+		}
+		require.NoError(t, rdb.Do(ctx, append([]interface{}{"TDIGEST.ADD"}, args...)...).Err())
+
+		rsp = rdb.Do(ctx, "TDIGEST.INFO", key3)
+		require.NoError(t, rsp.Err())
+		info = toTdigestInfo(t, rsp.Val())
+
+		require.Greater(t, info.MergedNodes, int64(0))
+		require.Greater(t, info.MergedWeight, int64(0))
+		require.EqualValues(t, 100, info.Observations)
+		require.Greater(t, info.TotalCompressions, int64(0))
+	})
 }

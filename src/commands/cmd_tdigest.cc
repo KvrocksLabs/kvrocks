@@ -131,6 +131,44 @@ class CommandTDigestInfo : public Commander {
   std::string key_name_;
 };
 
+class CommandTDigestAdd : public Commander {
+ public:
+  Status Parse(const std::vector<std::string> &args) override {
+    key_name_ = args[1];
+
+    values_.reserve(args.size() - 2);
+    for (size_t i = 2; i < args.size(); i++) {
+      auto value = ParseFloat(args[i]);
+      if (!value) {
+        return {Status::RedisParseErr, errValueIsNotFloat};
+      }
+      values_.push_back(*value);
+    }
+
+    return Status::OK();
+  }
+
+  Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
+    TDigest tdigest(srv->storage, conn->GetNamespace());
+
+    auto s = tdigest.Add(ctx, key_name_, values_);
+    if (!s.ok()) {
+      if (s.IsNotFound()) {
+        return {Status::RedisExecErr, errKeyNotFound};
+      }
+      return {Status::RedisExecErr, s.ToString()};
+    }
+
+    *output = redis::RESP_OK;
+    return Status::OK();
+  }
+
+ private:
+  std::string key_name_;
+  std::vector<double> values_;
+};
+
 REDIS_REGISTER_COMMANDS(TDigest, MakeCmdAttr<CommandTDigestCreate>("tdigest.create", -2, "write", 1, 1, 1),
-                        MakeCmdAttr<CommandTDigestInfo>("tdigest.info", 2, "read-only", 1, 1, 1));
+                        MakeCmdAttr<CommandTDigestInfo>("tdigest.info", 2, "read-only", 1, 1, 1),
+                        MakeCmdAttr<CommandTDigestAdd>("tdigest.add", -3, "write", 1, 1, 1));
 }  // namespace redis
