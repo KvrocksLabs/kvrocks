@@ -147,7 +147,6 @@ rocksdb::Status TDigest::Create(engine::Context& ctx, const Slice& digest_name, 
 
 rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, const std::vector<double>& inputs) {
   auto ns_key = AppendNamespacePrefix(digest_name);
-  LockGuard guard(storage_->GetLockManager(), ns_key);
 
   TDigestMetadata metadata;
   if (auto status = getMetaDataByNsKey(ctx, ns_key, &metadata); !status.ok()) {
