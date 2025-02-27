@@ -253,6 +253,9 @@ rocksdb::Status ZSet::RangeByRank(engine::Context &ctx, const Slice &user_key, c
   read_options.iterate_lower_bound = &lower_bound;
 
   auto batch = storage_->GetWriteBatchBase();
+  WriteBatchLogData log_data(kRedisZSet);
+  s = batch->PutLogData(log_data.Encode());
+  if (!s.ok()) return s;
   auto iter = util::UniqueIterator(ctx, read_options, score_cf_handle_);
   iter->Seek(start_key);
   // see comment in RangeByScore()
