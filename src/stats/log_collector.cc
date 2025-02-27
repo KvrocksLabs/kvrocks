@@ -58,8 +58,7 @@ LogCollector<T>::~LogCollector() {
 template <class T>
 ssize_t LogCollector<T>::Size() {
   std::lock_guard<std::mutex> guard(mu_);
-  ssize_t n = entries_.size();
-  return n;
+  return static_cast<ssize_t>(entries_.size());
 }
 
 template <class T>
