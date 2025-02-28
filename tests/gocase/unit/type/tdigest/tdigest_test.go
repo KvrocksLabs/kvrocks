@@ -203,4 +203,58 @@ func tdigestTests(t *testing.T, configs util.KvrocksServerConfigs) {
 		require.EqualValues(t, 100, info.Observations)
 		require.Greater(t, info.TotalCompressions, int64(0))
 	})
+
+	t.Run("tdigest.max with different arguments", func(t *testing.T) {
+		keyPrefix := "tdigest_max_"
+
+		// Test invalid arguments
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.MAX").Err(), errMsgWrongNumberArg)
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.MAX", keyPrefix+"nonexistent").Err(), errMsgKeyNotExist)
+
+		// Test with empty tdigest
+		key := keyPrefix + "test1"
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", key, "compression", "100").Err())
+		rsp := rdb.Do(ctx, "TDIGEST.MAX", key)
+		require.NoError(t, rsp.Err())
+		require.EqualValues(t, rsp.Val(), "nan")
+
+		// Test with single value
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "42.5").Err())
+		rsp = rdb.Do(ctx, "TDIGEST.MAX", key)
+		require.NoError(t, rsp.Err())
+		require.Equal(t, "42.5", rsp.Val())
+
+		// Test with multiple values
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "1.0", "100.5", "50.5", "-10.5").Err())
+		rsp = rdb.Do(ctx, "TDIGEST.MAX", key)
+		require.NoError(t, rsp.Err())
+		require.Equal(t, "100.5", rsp.Val())
+	})
+
+	t.Run("tdigest.min with different arguments", func(t *testing.T) {
+		keyPrefix := "tdigest_min_"
+
+		// Test invalid arguments
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.MIN").Err(), errMsgWrongNumberArg)
+		require.ErrorContains(t, rdb.Do(ctx, "TDIGEST.MIN", keyPrefix+"nonexistent").Err(), errMsgKeyNotExist)
+
+		// Test with empty tdigest
+		key := keyPrefix + "test1"
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.CREATE", key, "compression", "100").Err())
+		rsp := rdb.Do(ctx, "TDIGEST.MIN", key)
+		require.NoError(t, rsp.Err())
+		require.EqualValues(t, rsp.Val(), "nan")
+
+		// Test with single value
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "42.5").Err())
+		rsp = rdb.Do(ctx, "TDIGEST.MIN", key)
+		require.NoError(t, rsp.Err())
+		require.Equal(t, "42.5", rsp.Val())
+
+		// Test with multiple values
+		require.NoError(t, rdb.Do(ctx, "TDIGEST.ADD", key, "1.0", "100.5", "50.5", "-10.5").Err())
+		rsp = rdb.Do(ctx, "TDIGEST.MIN", key)
+		require.NoError(t, rsp.Err())
+		require.Equal(t, "-10.5", rsp.Val())
+	})
 }

@@ -168,7 +168,71 @@ class CommandTDigestAdd : public Commander {
   std::vector<double> values_;
 };
 
+class CommandTDigestMin : public Commander {
+ public:
+  Status Parse(const std::vector<std::string> &args) override {
+    key_name_ = args[1];
+    return Status::OK();
+  }
+
+  Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
+    TDigest tdigest(srv->storage, conn->GetNamespace());
+    TDigestMetadata metadata;
+    auto s = tdigest.GetMetaData(ctx, key_name_, &metadata);
+    if (!s.ok()) {
+      if (s.IsNotFound()) {
+        return {Status::RedisExecErr, errKeyNotFound};
+      }
+      return {Status::RedisExecErr, s.ToString()};
+    }
+
+    if (metadata.total_observations == 0) {
+      *output = redis::BulkString(fmt::format("{}", NAN));
+      return {Status::OK()};
+    }
+
+    *output = redis::BulkString(fmt::format("{}", metadata.minimum));
+    return Status::OK();
+  }
+
+ private:
+  std::string key_name_;
+};
+
+class CommandTDigestMax : public Commander {
+ public:
+  Status Parse(const std::vector<std::string> &args) override {
+    key_name_ = args[1];
+    return Status::OK();
+  }
+
+  Status Execute(engine::Context &ctx, Server *srv, Connection *conn, std::string *output) override {
+    TDigest tdigest(srv->storage, conn->GetNamespace());
+    TDigestMetadata metadata;
+    auto s = tdigest.GetMetaData(ctx, key_name_, &metadata);
+    if (!s.ok()) {
+      if (s.IsNotFound()) {
+        return {Status::RedisExecErr, errKeyNotFound};
+      }
+      return {Status::RedisExecErr, s.ToString()};
+    }
+
+    if (metadata.total_observations == 0) {
+      *output = redis::BulkString(fmt::format("{}", NAN));
+      return {Status::OK()};
+    }
+
+    *output = redis::BulkString(fmt::format("{}", metadata.maximum));
+    return Status::OK();
+  }
+
+ private:
+  std::string key_name_;
+};
+
 REDIS_REGISTER_COMMANDS(TDigest, MakeCmdAttr<CommandTDigestCreate>("tdigest.create", -2, "write", 1, 1, 1),
                         MakeCmdAttr<CommandTDigestInfo>("tdigest.info", 2, "read-only", 1, 1, 1),
-                        MakeCmdAttr<CommandTDigestAdd>("tdigest.add", -3, "write", 1, 1, 1));
+                        MakeCmdAttr<CommandTDigestAdd>("tdigest.add", -3, "write", 1, 1, 1),
+                        MakeCmdAttr<CommandTDigestMax>("tdigest.max", 2, "read-only", 1, 1, 1),
+                        MakeCmdAttr<CommandTDigestMin>("tdigest.min", 2, "read-only", 1, 1, 1));
 }  // namespace redis

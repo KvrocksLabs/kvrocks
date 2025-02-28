@@ -161,6 +161,8 @@ rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, con
 
   metadata.total_observations += inputs.size();
   metadata.total_weight += inputs.size();
+  metadata.maximum = std::max(metadata.maximum, *std::max_element(inputs.cbegin(), inputs.cend()));
+  metadata.minimum = std::min(metadata.minimum, *std::min_element(inputs.cbegin(), inputs.cend()));
 
   if (metadata.unmerged_nodes + inputs.size() <= metadata.capacity) {
     if (auto status = appendBuffer(ctx, batch, ns_key, inputs, &metadata); !status.ok()) {
