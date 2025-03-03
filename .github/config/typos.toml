@@ -38,3 +38,9 @@ ignore-hidden = false
 
 # jsoncons
 "ser" = "ser"
+
+#Comments
+"watched" = "watched"
+
+#Used as a short naming into tests
+"typ" = "typ"
