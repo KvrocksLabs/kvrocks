@@ -27,6 +27,8 @@
 #include "search/ir.h"
 #include "search/plan_executor.h"
 #include "search/search_encoding.h"
+#include "search/value.h"
+#include "status.h"
 #include "string_util.h"
 
 namespace kqir {
@@ -52,6 +54,9 @@ struct QueryExprEvaluator {
       return Visit(v);
     }
     if (auto v = dynamic_cast<TagContainExpr *>(e)) {
+      return Visit(v);
+    }
+    if (auto v = dynamic_cast<TextContainExpr *>(e)) {
       return Visit(v);
     }
 
@@ -133,6 +138,70 @@ struct QueryExprEvaluator {
     auto effective_range = v->range->val * (1 + meta->epsilon);
 
     return (dist >= -abs(effective_range) && dist <= abs(effective_range));
+  }
+
+  static std::vector<std::string> TrivialWhiteSpaceTokenize(std::string_view text) {
+    auto generate_check = [](std::string_view chars) {
+      std::bitset<256> res;
+      for (auto c : chars) res.set(c);
+      return res;
+    };
+
+    auto whitespaces = generate_check(" \t\r\n\v\f");
+    auto punctuations = generate_check(",.<>{}[]\"':;!@#$%^&*()-+=~");
+    auto all_marks = whitespaces | punctuations;
+
+    auto tolower = [] {
+      std::array<char, 256> res;
+      for (size_t i = 0; i < res.size(); ++i) {
+        if (i >= 'A' && i <= 'Z')
+          res[i] = (char)(i - 'A' + 'a');
+        else
+          res[i] = (char)i;
+      }
+      return res;
+    }();
+
+    std::vector<std::string> result;
+    std::string current;
+
+    auto push_and_clear = [&] {
+      if (!current.empty()) {
+        result.push_back(std::move(current));
+        current.clear();
+      }
+    };
+
+    for (auto i = text.begin(); i != text.end(); ++i) {
+      if (all_marks.test(*i)) {
+        push_and_clear();
+        continue;
+      }
+
+      if (*i == '\\') {
+        ++i;
+        if (i != text.end()) {
+          current.push_back(*i);
+        }
+      } else {
+        current.push_back(tolower[*i]);
+      }
+    }
+
+    push_and_clear();
+
+    return result;
+  }
+
+  StatusOr<bool> Visit(TextContainExpr *v) const {
+    auto val = GET_OR_RET(ctx->Retrieve(ctx->db_ctx, row, v->field->info));
+
+    CHECK(val.Is<kqir::String>());
+    CHECK(v->field->info->MetadataAs<redis::TextFieldMetadata>()->tokenize_type ==
+          redis::TextTokenizeType::TrivialWhitespace);
+
+    auto terms = TrivialWhiteSpaceTokenize(val.Get<kqir::String>());
+    return std::find(terms.begin(), terms.end(), util::ToLower(v->word->val)) != terms.end();
   }
 };
 

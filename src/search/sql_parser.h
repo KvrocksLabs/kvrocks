@@ -47,6 +47,9 @@ struct VectorLiteral : seq<WSPad<one<'['>>, Number, star<seq<WSPad<one<','>>>, N
 struct VectorCompareExpr : seq<WSPad<Identifier>, VectorCompareOp, WSPad<VectorLiteral>> {};
 struct VectorRangeExpr : seq<VectorCompareExpr, one<'<'>, WSPad<NumberOrParam>> {};
 
+struct TextContains : string<'c', 'o', 'n', 't', 'a', 'i', 'n', 's'> {};
+struct TextContainsExpr : seq<WSPad<Identifier>, TextContains, WSPad<StringOrParam>> {};
+
 struct BooleanAtomExpr : sor<HasTagExpr, NumericCompareExpr, VectorRangeExpr, WSPad<Boolean>> {};
 
 struct QueryExpr;

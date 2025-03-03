@@ -53,7 +53,9 @@ struct NumericRange : seq<one<'['>, WSPad<NumericRangePart>, WSPad<NumericRangeP
 struct KnnSearch : seq<one<'['>, WSPad<KnnToken>, WSPad<UintOrParam>, WSPad<Field>, WSPad<Param>, one<']'>> {};
 struct VectorRange : seq<one<'['>, WSPad<VectorRangeToken>, WSPad<NumberOrParam>, WSPad<Param>, one<']'>> {};
 
-struct FieldQuery : seq<WSPad<Field>, one<':'>, WSPad<sor<VectorRange, TagList, NumericRange>>> {};
+struct TextContains : sor<Identifier, StringL, Param> {};
+
+struct FieldQuery : seq<WSPad<Field>, one<':'>, WSPad<sor<VectorRange, TagList, NumericRange, TextContains>>> {};
 
 struct QueryExpr;
 

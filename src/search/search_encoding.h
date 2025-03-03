@@ -79,6 +79,8 @@ enum class IndexFieldType : uint8_t {
   NUMERIC = 2,
 
   VECTOR = 3,
+
+  TEXT = 4,
 };
 
 enum class VectorType : uint8_t {
@@ -432,6 +434,36 @@ struct HnswVectorFieldMetadata : IndexFieldMetadata {
     GetFixed32(input, &ef_runtime);
     GetDouble(input, &epsilon);
     GetFixed16(input, &num_levels);
+    return rocksdb::Status::OK();
+  }
+};
+
+enum class TextTokenizeType : uint8_t {
+  TrivialWhitespace,
+};
+
+struct TextFieldMetadata : IndexFieldMetadata {
+  TextTokenizeType tokenize_type = TextTokenizeType::TrivialWhitespace;
+
+  TextFieldMetadata() : IndexFieldMetadata(IndexFieldType::TEXT) {}
+
+  void Encode(std::string *dst) const override {
+    IndexFieldMetadata::Encode(dst);
+
+    PutFixed8(dst, (uint8_t)tokenize_type);
+  }
+
+  rocksdb::Status Decode(Slice *input) override {
+    if (auto s = IndexFieldMetadata::Decode(input); !s.ok()) {
+      return s;
+    }
+
+    if (input->size() < 1) {
+      return rocksdb::Status::Corruption(kErrorInsufficientLength);
+    }
+
+    GetFixed8(input, (uint8_t *)&tokenize_type);
+
     return rocksdb::Status::OK();
   }
 };
