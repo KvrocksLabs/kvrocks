@@ -33,12 +33,6 @@
 
 #include <stdint.h>
 
-#ifndef USE_ALIGNED_ACCESS
-#if defined(__sparc__) || defined(__arm__)
-#define USE_ALIGNED_ACCESS
-#endif
-#endif
-
 // NOLINTBEGIN
 
 /* MurmurHash2, 64 bit version.
@@ -55,11 +49,7 @@ inline uint64_t HllMurMurHash64A(const void *key, int len, uint32_t seed) {
     uint64_t k = 0;
 
 #if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-#ifdef USE_ALIGNED_ACCESS
     memcpy(&k, data, sizeof(uint64_t));
-#else
-    k = *((uint64_t *)data);
-#endif
 #else
     k = (uint64_t)data[0];
     k |= (uint64_t)data[1] << 8;
