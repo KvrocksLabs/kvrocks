@@ -239,6 +239,7 @@ Config::Config() {
        new EnumField<JsonStorageFormat>(&json_storage_format, json_storage_formats, JsonStorageFormat::JSON)},
       {"txn-context-enabled", true, new YesNoField(&txn_context_enabled, false)},
       {"skip-block-cache-deallocation-on-close", false, new YesNoField(&skip_block_cache_deallocation_on_close, false)},
+      {"hash-field-expiration", false, new YesNoField(&hash_field_expiration, false)},
       {"histogram-bucket-boundaries", true, new StringField(&histogram_bucket_boundaries_str_, "")},
 
       /* rocksdb options */

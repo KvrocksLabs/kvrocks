@@ -206,9 +206,22 @@ class Metadata {
   static uint64_t generateVersion();
 };
 
+enum class HashSubkeyEncoding : uint8_t {
+  VALUE_ONLY = 0,
+  VALUE_WITH_TTL = 1,
+};
+
 class HashMetadata : public Metadata {
  public:
+  HashSubkeyEncoding field_encoding = HashSubkeyEncoding::VALUE_ONLY;
+
   explicit HashMetadata(bool generate_version = true) : Metadata(kRedisHash, generate_version) {}
+
+  void Encode(std::string *dst) const override;
+  using Metadata::Decode;
+  rocksdb::Status Decode(Slice *input) override;
+
+  bool IsFieldExpirationEnabled() const;
 };
 
 class SetMetadata : public Metadata {

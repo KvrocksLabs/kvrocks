@@ -337,6 +337,30 @@ bool Metadata::IsEmptyableType() const {
 
 bool Metadata::Expired() const { return ExpireAt(util::GetTimeStampMS()); }
 
+bool HashMetadata::IsFieldExpirationEnabled() const { return field_encoding == HashSubkeyEncoding::VALUE_WITH_TTL; }
+
+void HashMetadata::Encode(std::string *dst) const {
+  Metadata::Encode(dst);
+  PutFixed8(dst, uint8_t(field_encoding));
+}
+
+rocksdb::Status HashMetadata::Decode(Slice *input) {
+  if (auto s = Metadata::Decode(input); !s.ok()) {
+    return s;
+  }
+
+  if (input->size() >= 1) {
+    if (!GetFixed8(input, reinterpret_cast<uint8_t *>(&field_encoding))) {
+      return rocksdb::Status::InvalidArgument(kErrMetadataTooShort);
+    }
+    if (field_encoding > HashSubkeyEncoding::VALUE_WITH_TTL) {
+      return rocksdb::Status::InvalidArgument("unexpected subkey encoding version");
+    }
+  }
+
+  return rocksdb::Status::OK();
+}
+
 ListMetadata::ListMetadata(bool generate_version)
     : Metadata(kRedisList, generate_version), head(UINT64_MAX / 2), tail(head) {}
 
