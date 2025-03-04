@@ -119,8 +119,8 @@ class TDigestImpl {
     tdigests_[1].resize(0);
     current_ = 0;
     total_weight_ = 0;
-    min_ = std::numeric_limits<double>::infinity();
-    max_ = -std::numeric_limits<double>::infinity();
+    min_ = std::numeric_limits<double>::max();
+    max_ = std::numeric_limits<double>::lowest();
     merger_.Reset(0, nullptr);
   }
 
@@ -225,18 +225,12 @@ class TDigestImpl {
 
   // merge input data with current tdigest
   void MergeInput(std::vector<double> input) {
-    if (tdigests_[current_].empty() && !input.empty()) {
-      min_ = input.front();
-      max_ = input.front();
-    }
     total_weight_ += static_cast<double>(input.size());
 
     std::sort(input.begin(), input.end());
     if (input.empty()) {
       return;
     }
-    min_ = std::min(min_, input.front());
-    max_ = std::max(max_, input.back());
 
     // pick next minimal centroid from input and tdigest, feed to merger
     merger_.Reset(total_weight_, &tdigests_[1 - current_]);
