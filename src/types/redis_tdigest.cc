@@ -161,6 +161,9 @@ rocksdb::Status TDigest::Add(engine::Context& ctx, const Slice& digest_name, con
 
   metadata.total_observations += inputs.size();
   metadata.total_weight += inputs.size();
+  auto [buffer_min, buffer_max] = std::minmax_element(inputs.cbegin(), inputs.cend());
+  metadata.maximum = std::max(metadata.maximum, *buffer_max);
+  metadata.minimum = std::min(metadata.minimum, *buffer_min);
 
   if (metadata.unmerged_nodes + inputs.size() <= metadata.capacity) {
     if (auto status = appendBuffer(ctx, batch, ns_key, inputs, &metadata); !status.ok()) {
@@ -279,8 +282,6 @@ rocksdb::Status TDigest::mergeCurrentBuffer(engine::Context& ctx, const std::str
   metadata->merge_times++;
   metadata->merged_nodes = merged_centroids->centroids.size();
   metadata->unmerged_nodes = 0;
-  metadata->minimum = merged_centroids->min;
-  metadata->maximum = merged_centroids->max;
   metadata->merged_weight = static_cast<uint64_t>(merged_centroids->total_weight);
 
   return rocksdb::Status::OK();
